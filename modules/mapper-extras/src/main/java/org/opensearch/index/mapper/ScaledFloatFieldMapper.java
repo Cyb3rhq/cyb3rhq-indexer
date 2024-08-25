@@ -35,7 +35,6 @@ package org.opensearch.index.mapper;
 import com.fasterxml.jackson.core.JsonParseException;
 
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NumericDocValues;
@@ -166,7 +165,7 @@ public class ScaledFloatFieldMapper extends ParametrizedFieldMapper {
 
     public static final TypeParser PARSER = new TypeParser((n, c) -> new Builder(n, c.getSettings()));
 
-    public static final class ScaledFloatFieldType extends SimpleMappedFieldType implements NumericPointEncoder {
+    public static final class ScaledFloatFieldType extends SimpleMappedFieldType {
 
         private final double scalingFactor;
         private final Double nullValue;
@@ -187,21 +186,6 @@ public class ScaledFloatFieldMapper extends ParametrizedFieldMapper {
 
         public ScaledFloatFieldType(String name, double scalingFactor) {
             this(name, true, false, true, Collections.emptyMap(), scalingFactor, null);
-        }
-
-        @Override
-        public byte[] encodePoint(Number value) {
-            assert value instanceof Double;
-            double doubleValue = (Double) value;
-            byte[] point = new byte[Long.BYTES];
-            if (doubleValue == Double.POSITIVE_INFINITY) {
-                LongPoint.encodeDimension(Long.MAX_VALUE, point, 0);
-            } else if (doubleValue == Double.NEGATIVE_INFINITY) {
-                LongPoint.encodeDimension(Long.MIN_VALUE, point, 0);
-            } else {
-                LongPoint.encodeDimension(Math.round(scale(value)), point, 0);
-            }
-            return point;
         }
 
         public double getScalingFactor() {

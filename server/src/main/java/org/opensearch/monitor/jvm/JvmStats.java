@@ -32,6 +32,7 @@
 
 package org.opensearch.monitor.jvm;
 
+import org.opensearch.Version;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
@@ -553,7 +554,11 @@ public class JvmStats implements Writeable, ToXContentFragment {
             max = in.readVLong();
             peakUsed = in.readVLong();
             peakMax = in.readVLong();
-            lastGcStats = new MemoryPoolGcStats(in);
+            if (in.getVersion().onOrAfter(Version.V_1_2_0)) {
+                lastGcStats = new MemoryPoolGcStats(in);
+            } else {
+                lastGcStats = new MemoryPoolGcStats(0, 0);
+            }
         }
 
         @Override
@@ -563,7 +568,9 @@ public class JvmStats implements Writeable, ToXContentFragment {
             out.writeVLong(max);
             out.writeVLong(peakUsed);
             out.writeVLong(peakMax);
-            lastGcStats.writeTo(out);
+            if (out.getVersion().onOrAfter(Version.V_1_2_0)) {
+                lastGcStats.writeTo(out);
+            }
         }
 
         public String getName() {

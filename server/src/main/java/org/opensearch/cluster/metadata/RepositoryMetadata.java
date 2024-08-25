@@ -31,6 +31,7 @@
 
 package org.opensearch.cluster.metadata;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.settings.Settings;
@@ -49,6 +50,8 @@ import java.util.Objects;
  */
 @PublicApi(since = "1.0.0")
 public class RepositoryMetadata implements Writeable {
+
+    public static final Version REPO_GEN_IN_CS_VERSION = LegacyESVersion.V_7_6_0;
 
     private final String name;
     private final String type;
@@ -173,8 +176,13 @@ public class RepositoryMetadata implements Writeable {
         name = in.readString();
         type = in.readString();
         settings = Settings.readSettingsFromStream(in);
-        generation = in.readLong();
-        pendingGeneration = in.readLong();
+        if (in.getVersion().onOrAfter(REPO_GEN_IN_CS_VERSION)) {
+            generation = in.readLong();
+            pendingGeneration = in.readLong();
+        } else {
+            generation = RepositoryData.UNKNOWN_REPO_GEN;
+            pendingGeneration = RepositoryData.EMPTY_REPO_GEN;
+        }
         if (in.getVersion().onOrAfter(Version.V_2_10_0)) {
             cryptoMetadata = in.readOptionalWriteable(CryptoMetadata::new);
         } else {
@@ -192,8 +200,10 @@ public class RepositoryMetadata implements Writeable {
         out.writeString(name);
         out.writeString(type);
         Settings.writeSettingsToStream(settings, out);
-        out.writeLong(generation);
-        out.writeLong(pendingGeneration);
+        if (out.getVersion().onOrAfter(REPO_GEN_IN_CS_VERSION)) {
+            out.writeLong(generation);
+            out.writeLong(pendingGeneration);
+        }
         if (out.getVersion().onOrAfter(Version.V_2_10_0)) {
             out.writeOptionalWriteable(cryptoMetadata);
         }

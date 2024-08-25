@@ -8,22 +8,17 @@
 
 package org.opensearch.index.snapshots.blobstore;
 
-import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.remote.RemoteStoreEnums.PathHashAlgorithm;
-import org.opensearch.index.remote.RemoteStoreEnums.PathType;
-import org.opensearch.index.remote.RemoteStorePathStrategy;
 import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Remote Store based Shard snapshot metadata
@@ -46,10 +41,8 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
     private final String repositoryBasePath;
     private final String indexUUID;
     private final List<String> fileNames;
-    private final PathType pathType;
-    private final PathHashAlgorithm pathHashAlgorithm;
 
-    static final String DEFAULT_VERSION = "2";
+    static final String DEFAULT_VERSION = "1";
     static final String NAME = "name";
     static final String VERSION = "version";
     static final String INDEX_VERSION = "index_version";
@@ -68,8 +61,6 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
 
     static final String TOTAL_FILE_COUNT = "number_of_files";
     static final String TOTAL_SIZE = "total_size";
-    static final String PATH_TYPE = "path_type";
-    static final String PATH_HASH_ALGORITHM = "path_hash_algorithm";
 
     private static final ParseField PARSE_NAME = new ParseField(NAME);
     private static final ParseField PARSE_VERSION = new ParseField(VERSION);
@@ -84,8 +75,6 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
     private static final ParseField PARSE_REMOTE_STORE_REPOSITORY = new ParseField(REMOTE_STORE_REPOSITORY);
     private static final ParseField PARSE_REPOSITORY_BASE_PATH = new ParseField(REPOSITORY_BASE_PATH);
     private static final ParseField PARSE_FILE_NAMES = new ParseField(FILE_NAMES);
-    private static final ParseField PARSE_PATH_TYPE = new ParseField(PATH_TYPE);
-    private static final ParseField PARSE_PATH_HASH_ALGORITHM = new ParseField(PATH_HASH_ALGORITHM);
 
     /**
      * Serializes shard snapshot metadata info into JSON
@@ -112,14 +101,6 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
             builder.value(fileName);
         }
         builder.endArray();
-        // We are handling NP check since a cluster can have indexes created earlier which do not have remote store
-        // path type and path hash algorithm in its custom data in index metadata.
-        if (Objects.nonNull(pathType)) {
-            builder.field(PATH_TYPE, pathType.getCode());
-        }
-        if (Objects.nonNull(pathHashAlgorithm)) {
-            builder.field(PATH_HASH_ALGORITHM, pathHashAlgorithm.getCode());
-        }
         return builder;
     }
 
@@ -135,30 +116,34 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
         String indexUUID,
         String remoteStoreRepository,
         String repositoryBasePath,
-        List<String> fileNames,
-        PathType pathType,
-        PathHashAlgorithm pathHashAlgorithm
+        List<String> fileNames
     ) {
-        this(
-            DEFAULT_VERSION,
+        this.version = DEFAULT_VERSION;
+        verifyParameters(
+            version,
             snapshot,
             indexVersion,
             primaryTerm,
             commitGeneration,
-            startTime,
-            time,
-            totalFileCount,
-            totalSize,
             indexUUID,
             remoteStoreRepository,
-            repositoryBasePath,
-            fileNames,
-            pathType,
-            pathHashAlgorithm
+            repositoryBasePath
         );
+        this.snapshot = snapshot;
+        this.indexVersion = indexVersion;
+        this.primaryTerm = primaryTerm;
+        this.commitGeneration = commitGeneration;
+        this.startTime = startTime;
+        this.time = time;
+        this.totalFileCount = totalFileCount;
+        this.totalSize = totalSize;
+        this.indexUUID = indexUUID;
+        this.remoteStoreRepository = remoteStoreRepository;
+        this.repositoryBasePath = repositoryBasePath;
+        this.fileNames = fileNames;
     }
 
-    RemoteStoreShardShallowCopySnapshot(
+    private RemoteStoreShardShallowCopySnapshot(
         String version,
         String snapshot,
         long indexVersion,
@@ -171,9 +156,7 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
         String indexUUID,
         String remoteStoreRepository,
         String repositoryBasePath,
-        List<String> fileNames,
-        PathType pathType,
-        PathHashAlgorithm pathHashAlgorithm
+        List<String> fileNames
     ) {
         verifyParameters(
             version,
@@ -183,9 +166,7 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
             commitGeneration,
             indexUUID,
             remoteStoreRepository,
-            repositoryBasePath,
-            pathType,
-            pathHashAlgorithm
+            repositoryBasePath
         );
         this.version = version;
         this.snapshot = snapshot;
@@ -200,8 +181,6 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
         this.remoteStoreRepository = remoteStoreRepository;
         this.repositoryBasePath = repositoryBasePath;
         this.fileNames = fileNames;
-        this.pathType = pathType;
-        this.pathHashAlgorithm = pathHashAlgorithm;
     }
 
     /**
@@ -224,8 +203,6 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
         long primaryTerm = -1;
         long commitGeneration = -1;
         List<String> fileNames = new ArrayList<>();
-        PathType pathType = null;
-        PathHashAlgorithm pathHashAlgorithm = null;
 
         if (parser.currentToken() == null) { // fresh parser? move to the first token
             parser.nextToken();
@@ -260,10 +237,6 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
                     remoteStoreRepository = parser.text();
                 } else if (PARSE_REPOSITORY_BASE_PATH.match(currentFieldName, parser.getDeprecationHandler())) {
                     repositoryBasePath = parser.text();
-                } else if (PARSE_PATH_TYPE.match(currentFieldName, parser.getDeprecationHandler())) {
-                    pathType = PathType.fromCode(parser.intValue());
-                } else if (PARSE_PATH_HASH_ALGORITHM.match(currentFieldName, parser.getDeprecationHandler())) {
-                    pathHashAlgorithm = PathHashAlgorithm.fromCode(parser.intValue());
                 } else {
                     throw new OpenSearchParseException("unknown parameter [{}]", currentFieldName);
                 }
@@ -293,9 +266,7 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
             indexUUID,
             remoteStoreRepository,
             repositoryBasePath,
-            fileNames,
-            pathType,
-            pathHashAlgorithm
+            fileNames
         );
     }
 
@@ -409,44 +380,35 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
         long commitGeneration,
         String indexUUID,
         String remoteStoreRepository,
-        String repositoryBasePath,
-        PathType pathType,
-        PathHashAlgorithm pathHashAlgorithm
+        String repositoryBasePath
     ) {
-
-        throwExceptionIfInvalid(Objects.isNull(version), "Invalid Version Provided");
-        throwExceptionIfInvalid(Objects.isNull(snapshot), "Invalid/Missing Snapshot Name");
-        throwExceptionIfInvalid(indexVersion < 0, "Invalid Index Version");
-        throwExceptionIfInvalid(primaryTerm < 0, "Invalid Primary Term");
-        throwExceptionIfInvalid(commitGeneration < 0, "Invalid Commit Generation");
-        throwExceptionIfInvalid(Objects.isNull(indexUUID), "Invalid/Missing Index UUID");
-        throwExceptionIfInvalid(Objects.isNull(remoteStoreRepository), "Invalid/Missing Remote Store Repository");
-        throwExceptionIfInvalid(Objects.isNull(repositoryBasePath), "Invalid/Missing Repository Base Path");
-        throwExceptionIfInvalid(
-            isValidRemotePathConfiguration(version, pathType, pathHashAlgorithm) == false,
-            new ParameterizedMessage(
-                "Invalid combination of pathType={} pathHashAlgorithm={} for version={}",
-                pathType,
-                pathHashAlgorithm,
-                version
-            ).getFormattedMessage()
-        );
-    }
-
-    private void throwExceptionIfInvalid(boolean isInvalid, String exceptionStr) {
-        if (isInvalid) {
-            throw new IllegalArgumentException(exceptionStr);
+        String exceptionStr = null;
+        if (version == null) {
+            exceptionStr = "Invalid Version Provided";
         }
-    }
-
-    private boolean isValidRemotePathConfiguration(String version, PathType pathType, PathHashAlgorithm pathHashAlgorithm) {
-        switch (version) {
-            case "1":
-                return Objects.isNull(pathType) && Objects.isNull(pathHashAlgorithm);
-            case "2":
-                return Objects.nonNull(pathType) && RemoteStorePathStrategy.isCompatible(pathType, pathHashAlgorithm);
-            default:
-                return false;
+        if (snapshot == null) {
+            exceptionStr = "Invalid/Missing Snapshot Name";
+        }
+        if (indexVersion < 0) {
+            exceptionStr = "Invalid Index Version";
+        }
+        if (primaryTerm < 0) {
+            exceptionStr = "Invalid Primary Term";
+        }
+        if (commitGeneration < 0) {
+            exceptionStr = "Invalid Commit Generation";
+        }
+        if (indexUUID == null) {
+            exceptionStr = "Invalid/Missing Index UUID";
+        }
+        if (remoteStoreRepository == null) {
+            exceptionStr = "Invalid/Missing Remote Store Repository";
+        }
+        if (repositoryBasePath == null) {
+            exceptionStr = "Invalid/Missing Repository Base Path";
+        }
+        if (exceptionStr != null) {
+            throw new IllegalArgumentException(exceptionStr);
         }
     }
 
@@ -471,9 +433,7 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
             indexUUID,
             remoteStoreRepository,
             repositoryBasePath,
-            fileNames,
-            pathType,
-            pathHashAlgorithm
+            fileNames
         );
     }
 
@@ -488,64 +448,5 @@ public class RemoteStoreShardShallowCopySnapshot implements ToXContentFragment, 
             totalSize,
             null
         ); // Not adding a real generation here as it doesn't matter to callers
-    }
-
-    public PathType getPathType() {
-        return pathType;
-    }
-
-    public PathHashAlgorithm getPathHashAlgorithm() {
-        return pathHashAlgorithm;
-    }
-
-    public RemoteStorePathStrategy getRemoteStorePathStrategy() {
-        if (Objects.nonNull(pathType)) {
-            return new RemoteStorePathStrategy(pathType, pathHashAlgorithm);
-        }
-        return new RemoteStorePathStrategy(PathType.FIXED);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        RemoteStoreShardShallowCopySnapshot that = (RemoteStoreShardShallowCopySnapshot) obj;
-
-        return Objects.equals(this.snapshot, that.snapshot)
-            && Objects.equals(this.version, that.version)
-            && this.indexVersion == that.indexVersion
-            && this.startTime == that.startTime
-            && this.time == that.time
-            && this.totalFileCount == that.totalFileCount
-            && this.totalSize == that.totalSize
-            && this.primaryTerm == that.primaryTerm
-            && this.commitGeneration == that.commitGeneration
-            && Objects.equals(this.remoteStoreRepository, that.remoteStoreRepository)
-            && Objects.equals(this.repositoryBasePath, that.repositoryBasePath)
-            && Objects.equals(this.indexUUID, that.indexUUID)
-            && Objects.equals(this.fileNames, that.fileNames)
-            && Objects.equals(this.pathType, that.pathType)
-            && Objects.equals(this.pathHashAlgorithm, that.pathHashAlgorithm);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(
-            snapshot,
-            version,
-            indexVersion,
-            startTime,
-            time,
-            totalFileCount,
-            totalSize,
-            primaryTerm,
-            commitGeneration,
-            remoteStoreRepository,
-            repositoryBasePath,
-            indexUUID,
-            fileNames,
-            pathType,
-            pathHashAlgorithm
-        );
     }
 }

@@ -327,7 +327,7 @@ public class ChildQuerySearchIT extends ParentChildTestCase {
             }
             assertThat(parentToChildren.get(previousParentId).add(childId), is(true));
         }
-        indexRandom(true, builders.toArray(new IndexRequestBuilder[0]));
+        indexRandom(true, builders.toArray(new IndexRequestBuilder[builders.size()]));
 
         assertThat(parentToChildren.isEmpty(), equalTo(false));
         for (Map.Entry<String, Set<String>> parentToChildrenEntry : parentToChildren.entrySet()) {

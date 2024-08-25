@@ -32,7 +32,6 @@
 
 package org.opensearch.http.netty4;
 
-import org.opensearch.common.Nullable;
 import org.opensearch.common.concurrent.CompletableContext;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.http.HttpChannel;
@@ -43,22 +42,15 @@ import java.net.InetSocketAddress;
 import java.util.Optional;
 
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelPipeline;
 
 public class Netty4HttpChannel implements HttpChannel {
     private static final String CHANNEL_PROPERTY = "channel";
 
     private final Channel channel;
     private final CompletableContext<Void> closeContext = new CompletableContext<>();
-    private final ChannelPipeline inboundPipeline;
 
     Netty4HttpChannel(Channel channel) {
-        this(channel, null);
-    }
-
-    Netty4HttpChannel(Channel channel, ChannelPipeline inboundPipeline) {
         this.channel = channel;
-        this.inboundPipeline = inboundPipeline;
         Netty4TcpChannel.addListener(this.channel.closeFuture(), closeContext);
     }
 
@@ -92,10 +84,6 @@ public class Netty4HttpChannel implements HttpChannel {
         channel.close();
     }
 
-    public @Nullable ChannelPipeline inboundPipeline() {
-        return inboundPipeline;
-    }
-
     public Channel getNettyChannel() {
         return channel;
     }
@@ -108,10 +96,6 @@ public class Netty4HttpChannel implements HttpChannel {
         }
 
         Object handler = getNettyChannel().pipeline().get(name);
-
-        if (handler == null && inboundPipeline() != null) {
-            handler = inboundPipeline().get(name);
-        }
 
         if (handler != null && clazz.isInstance(handler) == true) {
             return Optional.of((T) handler);

@@ -110,9 +110,4 @@ public class TransportPendingClusterTasksAction extends TransportClusterManagerN
         logger.trace("done fetching pending tasks from cluster service");
         listener.onResponse(new PendingClusterTasksResponse(pendingTasks));
     }
-
-    @Override
-    protected boolean localExecuteSupportedByAction() {
-        return false;
-    }
 }

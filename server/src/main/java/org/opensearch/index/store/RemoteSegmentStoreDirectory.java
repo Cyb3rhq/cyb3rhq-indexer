@@ -31,7 +31,6 @@ import org.opensearch.common.logging.Loggers;
 import org.opensearch.common.lucene.store.ByteArrayIndexInput;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.remote.RemoteStorePathStrategy;
 import org.opensearch.index.remote.RemoteStoreUtils;
 import org.opensearch.index.store.lockmanager.FileLockInfo;
 import org.opensearch.index.store.lockmanager.RemoteStoreCommitLevelLockManager;
@@ -453,7 +452,7 @@ public final class RemoteSegmentStoreDirectory extends FilterDirectory implement
      * @param context  IOContext to be used to open IndexInput of file during remote upload
      * @param listener Listener to handle upload callback events
      */
-    public void copyFrom(Directory from, String src, IOContext context, ActionListener<Void> listener, boolean lowPriorityUpload) {
+    public void copyFrom(Directory from, String src, IOContext context, ActionListener<Void> listener) {
         try {
             final String remoteFileName = getNewRemoteSegmentFilename(src);
             boolean uploaded = remoteDataDirectory.copyFrom(from, src, remoteFileName, context, () -> {
@@ -462,7 +461,7 @@ public final class RemoteSegmentStoreDirectory extends FilterDirectory implement
                 } catch (IOException e) {
                     throw new RuntimeException("Exception in segment postUpload for file " + src, e);
                 }
-            }, listener, lowPriorityUpload);
+            }, listener);
             if (uploaded == false) {
                 copyFrom(from, src, src, context);
                 listener.onResponse(null);
@@ -898,15 +897,13 @@ public final class RemoteSegmentStoreDirectory extends FilterDirectory implement
         RemoteSegmentStoreDirectoryFactory remoteDirectoryFactory,
         String remoteStoreRepoForIndex,
         String indexUUID,
-        ShardId shardId,
-        RemoteStorePathStrategy pathStrategy
+        ShardId shardId
     ) {
         try {
             RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = (RemoteSegmentStoreDirectory) remoteDirectoryFactory.newDirectory(
                 remoteStoreRepoForIndex,
                 indexUUID,
-                shardId,
-                pathStrategy
+                shardId
             );
             remoteSegmentStoreDirectory.deleteStaleSegments(0);
             remoteSegmentStoreDirectory.deleteIfEmpty();

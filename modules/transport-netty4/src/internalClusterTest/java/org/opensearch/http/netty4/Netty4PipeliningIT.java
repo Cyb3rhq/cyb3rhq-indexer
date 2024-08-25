@@ -62,7 +62,7 @@ public class Netty4PipeliningIT extends OpenSearchNetty4IntegTestCase {
         TransportAddress[] boundAddresses = httpServerTransport.boundAddress().boundAddresses();
         TransportAddress transportAddress = randomFrom(boundAddresses);
 
-        try (Netty4HttpClient nettyHttpClient = Netty4HttpClient.http()) {
+        try (Netty4HttpClient nettyHttpClient = new Netty4HttpClient()) {
             Collection<FullHttpResponse> responses = nettyHttpClient.get(transportAddress.address(), requests);
             try {
                 assertThat(responses, hasSize(5));

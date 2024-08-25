@@ -38,9 +38,12 @@ import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.common.time.DateFormatter;
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.similarity.SimilarityService;
@@ -91,7 +94,7 @@ public class DocumentMapperParser {
         this.scriptService = scriptService;
         this.typeParsers = mapperRegistry.getMapperParsers();
         this.indexVersionCreated = indexSettings.getIndexVersionCreated();
-        this.rootTypeParsers = mapperRegistry.getMetadataMapperParsers();
+        this.rootTypeParsers = mapperRegistry.getMetadataMapperParsers(indexVersionCreated);
     }
 
     public Mapper.TypeParser.ParserContext parserContext() {
@@ -133,7 +136,7 @@ public class DocumentMapperParser {
     }
 
     @SuppressWarnings({ "unchecked" })
-    public DocumentMapper parse(String type, Map<String, Object> mapping) throws MapperParsingException {
+    private DocumentMapper parse(String type, Map<String, Object> mapping) throws MapperParsingException {
         if (type == null) {
             throw new MapperParsingException("Failed to derive type");
         }
@@ -195,6 +198,18 @@ public class DocumentMapperParser {
             remainingFields.append(" [").append(key).append(" : ").append(map.get(key)).append("]");
         }
         return remainingFields.toString();
+    }
+
+    private Tuple<String, Map<String, Object>> extractMapping(String type, String source) throws MapperParsingException {
+        Map<String, Object> root;
+        try (
+            XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, source)
+        ) {
+            root = parser.mapOrdered();
+        } catch (Exception e) {
+            throw new MapperParsingException("failed to parse mapping definition", e);
+        }
+        return extractMapping(type, root);
     }
 
     /**

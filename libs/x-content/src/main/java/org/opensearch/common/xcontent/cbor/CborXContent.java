@@ -38,6 +38,7 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.core.StreamWriteConstraints;
+import com.fasterxml.jackson.core.StreamWriteFeature;
 import com.fasterxml.jackson.dataformat.cbor.CBORFactory;
 
 import org.opensearch.common.xcontent.XContentContraints;
@@ -61,6 +62,8 @@ import java.util.Set;
  * A CBOR based content implementation using Jackson.
  */
 public class CborXContent implements XContent, XContentContraints {
+    public static final boolean USE_FAST_DOUBLE_WRITER = Boolean.getBoolean("opensearch.xcontent.use_fast_double_writer");
+
     public static XContentBuilder contentBuilder() throws IOException {
         return XContentBuilder.builder(cborXContent);
     }
@@ -83,6 +86,7 @@ public class CborXContent implements XContent, XContentContraints {
                 .build()
         );
         cborFactory.configure(StreamReadFeature.USE_FAST_DOUBLE_PARSER.mappedFeature(), true);
+        cborFactory.configure(StreamWriteFeature.USE_FAST_DOUBLE_WRITER.mappedFeature(), USE_FAST_DOUBLE_WRITER);
         cborXContent = new CborXContent();
     }
 

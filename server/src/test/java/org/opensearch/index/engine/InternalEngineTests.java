@@ -40,6 +40,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.filter.RegexFilter;
+import org.apache.lucene.codecs.LiveDocsFormat;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.KeywordField;
 import org.apache.lucene.document.LongPoint;
@@ -339,58 +340,6 @@ public class InternalEngineTests extends EngineTestCase {
 
             segments = engine.segments(true);
             assertThat(segments.size(), equalTo(3));
-        }
-    }
-
-    public void testSegmentsWithUseCompoundFileFlag_true() throws IOException {
-        try (Store store = createStore(); Engine engine = createEngine(defaultSettings, store, createTempDir(), new TieredMergePolicy())) {
-            ParsedDocument doc = testParsedDocument("1", null, testDocument(), B_1, null);
-            Engine.Index index = indexForDoc(doc);
-            engine.index(index);
-            engine.flush();
-            final List<Segment> segments = engine.segments(false);
-            assertThat(segments, hasSize(1));
-            assertTrue(segments.get(0).compound);
-            boolean cfeCompoundFileFound = false;
-            boolean cfsCompoundFileFound = false;
-            for (final String fileName : store.readLastCommittedSegmentsInfo().files(true)) {
-                if (fileName.endsWith(".cfe")) {
-                    cfeCompoundFileFound = true;
-                }
-                if (fileName.endsWith(".cfs")) {
-                    cfsCompoundFileFound = true;
-                }
-            }
-            Assert.assertTrue(cfeCompoundFileFound);
-            Assert.assertTrue(cfsCompoundFileFound);
-        }
-    }
-
-    public void testSegmentsWithUseCompoundFileFlag_false() throws IOException {
-        final IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(
-            "test",
-            Settings.builder().put(defaultSettings.getSettings()).put(EngineConfig.INDEX_USE_COMPOUND_FILE.getKey(), false).build()
-        );
-        try (Store store = createStore(); Engine engine = createEngine(indexSettings, store, createTempDir(), new TieredMergePolicy())) {
-            ParsedDocument doc = testParsedDocument("1", null, testDocument(), B_1, null);
-            Engine.Index index = indexForDoc(doc);
-            engine.index(index);
-            engine.flush();
-            final List<Segment> segments = engine.segments(false);
-            assertThat(segments, hasSize(1));
-            assertFalse(segments.get(0).compound);
-            boolean cfeCompoundFileFound = false;
-            boolean cfsCompoundFileFound = false;
-            for (final String fileName : store.readLastCommittedSegmentsInfo().files(true)) {
-                if (fileName.endsWith(".cfe")) {
-                    cfeCompoundFileFound = true;
-                }
-                if (fileName.endsWith(".cfs")) {
-                    cfsCompoundFileFound = true;
-                }
-            }
-            Assert.assertFalse(cfeCompoundFileFound);
-            Assert.assertFalse(cfsCompoundFileFound);
         }
     }
 
@@ -923,7 +872,7 @@ public class InternalEngineTests extends EngineTestCase {
         } finally {
             IOUtils.close(engine);
         }
-        try (Engine recoveringEngine = new InternalEngine(engine.config())) {
+        try (InternalEngine recoveringEngine = new InternalEngine(engine.config())) {
             TranslogHandler translogHandler = createTranslogHandler(engine.config().getIndexSettings(), recoveringEngine);
             recoveringEngine.translogManager()
                 .recoverFromTranslog(translogHandler, recoveringEngine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
@@ -950,15 +899,15 @@ public class InternalEngineTests extends EngineTestCase {
             IOUtils.close(initialEngine);
         }
 
-        Engine recoveringEngine = null;
+        InternalEngine recoveringEngine = null;
         try {
             final AtomicBoolean committed = new AtomicBoolean();
             recoveringEngine = new InternalEngine(initialEngine.config()) {
 
                 @Override
-                protected void commitIndexWriter(IndexWriter writer, String translogUUID) throws IOException {
+                protected void commitIndexWriter(IndexWriter writer, Translog translog) throws IOException {
                     committed.set(true);
-                    super.commitIndexWriter(writer, translogUUID);
+                    super.commitIndexWriter(writer, translog);
                 }
             };
             assertThat(recoveringEngine.translogManager().getTranslogStats().getUncommittedOperations(), equalTo(docs));
@@ -976,7 +925,7 @@ public class InternalEngineTests extends EngineTestCase {
         final List<Long> seqNos = LongStream.range(0, docs).boxed().collect(Collectors.toList());
         Randomness.shuffle(seqNos);
         Engine initialEngine = null;
-        Engine recoveringEngine = null;
+        InternalEngine recoveringEngine = null;
         Store store = createStore();
         final AtomicInteger counter = new AtomicInteger();
         try {
@@ -1872,7 +1821,7 @@ public class InternalEngineTests extends EngineTestCase {
         try (
             Store store = createStore();
             InternalEngine engine = createEngine(
-                config(indexSettings, store, createTempDir(), newMergePolicy(random(), false), null, null, globalCheckpoint::get)
+                config(indexSettings, store, createTempDir(), newMergePolicy(), null, null, globalCheckpoint::get)
             )
         ) {
             int numDocs = scaledRandomIntBetween(10, 100);
@@ -3290,10 +3239,22 @@ public class InternalEngineTests extends EngineTestCase {
         MockDirectoryWrapper wrapper = newMockDirectory();
         final CountDownLatch cleanupCompleted = new CountDownLatch(1);
         MockDirectoryWrapper.Failure fail = new MockDirectoryWrapper.Failure() {
+            public boolean didFail1;
+            public boolean didFail2;
+
             @Override
             public void eval(MockDirectoryWrapper dir) throws IOException {
-                // Fail segment merge with diskfull during merging terms
-                if (callStackContainsAnyOf("mergeTerms")) {
+                if (!doFail) {
+                    return;
+                }
+
+                // Fail segment merge with diskfull during merging terms.
+                if (callStackContainsAnyOf("mergeTerms") && !didFail1) {
+                    didFail1 = true;
+                    throw new IOException("No space left on device");
+                }
+                if (callStackContains(LiveDocsFormat.class, "writeLiveDocs") && !didFail2) {
+                    didFail2 = true;
                     throw new IOException("No space left on device");
                 }
             }
@@ -3369,6 +3330,7 @@ public class InternalEngineTests extends EngineTestCase {
             segments = engine.segments(false);
             assertThat(segments.size(), equalTo(2));
 
+            fail.setDoFail();
             // IndexWriter can throw either IOException or IllegalStateException depending on whether tragedy is set or not.
             expectThrowsAnyOf(
                 Arrays.asList(IOException.class, IllegalStateException.class),
@@ -3388,10 +3350,20 @@ public class InternalEngineTests extends EngineTestCase {
         MockDirectoryWrapper wrapper = newMockDirectory();
         final CountDownLatch cleanupCompleted = new CountDownLatch(1);
         MockDirectoryWrapper.Failure fail = new MockDirectoryWrapper.Failure() {
+            public boolean didFail1;
+            public boolean didFail2;
 
             @Override
             public void eval(MockDirectoryWrapper dir) throws IOException {
-                if (callStackContainsAnyOf("mergeTerms")) {
+                if (!doFail) {
+                    return;
+                }
+                if (callStackContainsAnyOf("mergeTerms") && !didFail1) {
+                    didFail1 = true;
+                    throw new IOException("No space left on device");
+                }
+                if (callStackContains(LiveDocsFormat.class, "writeLiveDocs") && !didFail2) {
+                    didFail2 = true;
                     throw new IOException("No space left on device");
                 }
             }
@@ -3472,6 +3444,7 @@ public class InternalEngineTests extends EngineTestCase {
             segments = engine.segments(false);
             assertThat(segments.size(), equalTo(2));
 
+            fail.setDoFail();
             // IndexWriter can throw either IOException or IllegalStateException depending on whether tragedy is set or not.
             expectThrowsAnyOf(
                 Arrays.asList(IOException.class, IllegalStateException.class),
@@ -3491,10 +3464,20 @@ public class InternalEngineTests extends EngineTestCase {
         MockDirectoryWrapper wrapper = newMockDirectory();
         final CountDownLatch cleanupCompleted = new CountDownLatch(1);
         MockDirectoryWrapper.Failure fail = new MockDirectoryWrapper.Failure() {
+            public boolean didFail1;
+            public boolean didFail2;
 
             @Override
             public void eval(MockDirectoryWrapper dir) throws IOException {
-                if (callStackContainsAnyOf("mergeTerms")) {
+                if (!doFail) {
+                    return;
+                }
+                if (callStackContainsAnyOf("mergeTerms") && !didFail1) {
+                    didFail1 = true;
+                    throw new IOException("No space left on device");
+                }
+                if (callStackContains(LiveDocsFormat.class, "writeLiveDocs") && !didFail2) {
+                    didFail2 = true;
                     throw new IOException("No space left on device");
                 }
             }
@@ -3560,6 +3543,7 @@ public class InternalEngineTests extends EngineTestCase {
             segments = engine.segments(false);
             assertThat(segments.size(), equalTo(2));
 
+            fail.setDoFail();
             // Close the store so that unreferenced file cleanup will fail.
             store.close();
 
@@ -3842,8 +3826,8 @@ public class InternalEngineTests extends EngineTestCase {
                 ) {
 
                     @Override
-                    protected void commitIndexWriter(IndexWriter writer, String translogUUID) throws IOException {
-                        super.commitIndexWriter(writer, translogUUID);
+                    protected void commitIndexWriter(IndexWriter writer, Translog translog) throws IOException {
+                        super.commitIndexWriter(writer, translog);
                         if (throwErrorOnCommit.get()) {
                             throw new RuntimeException("power's out");
                         }
@@ -3912,6 +3896,17 @@ public class InternalEngineTests extends EngineTestCase {
                 assertThat(topDocs.totalHits.value, equalTo(0L));
             }
         }
+    }
+
+    private Path[] filterExtraFSFiles(Path[] files) {
+        List<Path> paths = new ArrayList<>();
+        for (Path p : files) {
+            if (p.getFileName().toString().startsWith("extra")) {
+                continue;
+            }
+            paths.add(p);
+        }
+        return paths.toArray(new Path[0]);
     }
 
     public void testTranslogReplay() throws IOException {
@@ -4054,7 +4049,7 @@ public class InternalEngineTests extends EngineTestCase {
         final Path badTranslogLog = createTempDir();
         final String badUUID = Translog.createEmptyTranslog(badTranslogLog, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());
         Translog translog = new LocalTranslog(
-            new TranslogConfig(shardId, badTranslogLog, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "", false),
+            new TranslogConfig(shardId, badTranslogLog, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, ""),
             badUUID,
             createTranslogDeletionPolicy(INDEX_SETTINGS),
             () -> SequenceNumbers.NO_OPS_PERFORMED,
@@ -4072,8 +4067,7 @@ public class InternalEngineTests extends EngineTestCase {
             translog.location(),
             config.getIndexSettings(),
             BigArrays.NON_RECYCLING_INSTANCE,
-            "",
-            false
+            ""
         );
 
         EngineConfig brokenConfig = new EngineConfig.Builder().shardId(shardId)
@@ -5857,8 +5851,7 @@ public class InternalEngineTests extends EngineTestCase {
             }
             try (InternalEngine engine = new InternalEngine(engineConfig)) {
                 engine.ensureOpen();
-                final long currentTranslogGeneration = assertAndGetInternalTranslogManager(engine.translogManager()).getTranslog()
-                    .currentFileGeneration();
+                final long currentTranslogGeneration = engine.translogManager().getTranslog().currentFileGeneration();
                 TranslogHandler translogHandler = createTranslogHandler(engineConfig.getIndexSettings(), engine);
                 engine.translogManager().recoverFromTranslog(translogHandler, engine.getProcessedLocalCheckpoint(), globalCheckpoint.get());
                 engine.translogManager().restoreLocalHistoryFromTranslog(engine.getProcessedLocalCheckpoint(), translogHandler);
@@ -6172,14 +6165,14 @@ public class InternalEngineTests extends EngineTestCase {
         final AtomicLong lastSyncedGlobalCheckpointBeforeCommit = new AtomicLong(Translog.readGlobalCheckpoint(translogPath, translogUUID));
         try (InternalEngine engine = new InternalEngine(engineConfig) {
             @Override
-            protected void commitIndexWriter(IndexWriter writer, String translogUUID) throws IOException {
+            protected void commitIndexWriter(IndexWriter writer, Translog translog) throws IOException {
                 lastSyncedGlobalCheckpointBeforeCommit.set(Translog.readGlobalCheckpoint(translogPath, translogUUID));
                 // Advance the global checkpoint during the flush to create a lag between a persisted global checkpoint in the translog
                 // (this value is visible to the deletion policy) and an in memory global checkpoint in the SequenceNumbersService.
                 if (rarely()) {
                     globalCheckpoint.set(randomLongBetween(globalCheckpoint.get(), getPersistedLocalCheckpoint()));
                 }
-                super.commitIndexWriter(writer, translogUUID);
+                super.commitIndexWriter(writer, translog);
             }
         }) {
             engine.translogManager().recoverFromTranslog(translogHandler, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
@@ -6841,8 +6834,28 @@ public class InternalEngineTests extends EngineTestCase {
                 }
             }
             List<Translog.Operation> luceneOps = readAllOperationsBasedOnSource(engine);
+            // todo remove in next release
+            List<Translog.Operation> translogOps = readAllOperationsBasedOnTranslog(engine);
             assertThat(luceneOps.stream().map(o -> o.seqNo()).collect(Collectors.toList()), containsInAnyOrder(expectedSeqNos.toArray()));
+            assertThat(translogOps.stream().map(o -> o.seqNo()).collect(Collectors.toList()), containsInAnyOrder(expectedSeqNos.toArray()));
         }
+    }
+
+    /**
+     * Test creating new snapshot from translog file
+     *
+     * @deprecated reading history operations from the translog file is deprecated and will be removed in the next release
+     */
+    @Deprecated
+    private static List<Translog.Operation> readAllOperationsBasedOnTranslog(Engine engine) throws IOException {
+        final List<Translog.Operation> operations = new ArrayList<>();
+        try (Translog.Snapshot snapshot = engine.newChangesSnapshotFromTranslogFile("test", 0, Long.MAX_VALUE, false)) {
+            Translog.Operation op;
+            while ((op = snapshot.next()) != null) {
+                operations.add(op);
+            }
+        }
+        return operations;
     }
 
     public void testLuceneHistoryOnPrimary() throws Exception {
@@ -7767,8 +7780,7 @@ public class InternalEngineTests extends EngineTestCase {
                 createTempDir(),
                 config.getTranslogConfig().getIndexSettings(),
                 config.getTranslogConfig().getBigArrays(),
-                "",
-                false
+                ""
             );
             EngineConfig configWithWarmer = new EngineConfig.Builder().shardId(config.getShardId())
                 .threadPool(config.getThreadPool())

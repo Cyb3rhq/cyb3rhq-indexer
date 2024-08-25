@@ -30,6 +30,7 @@ import org.opensearch.test.transport.MockTransportService;
 import org.junit.Before;
 
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -49,7 +50,7 @@ public class PrimaryTermValidationIT extends RemoteStoreBaseIntegTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Stream.concat(super.nodePlugins().stream(), Stream.of(MockTransportService.TestPlugin.class)).collect(Collectors.toList());
+        return Arrays.asList(MockTransportService.TestPlugin.class);
     }
 
     @Before

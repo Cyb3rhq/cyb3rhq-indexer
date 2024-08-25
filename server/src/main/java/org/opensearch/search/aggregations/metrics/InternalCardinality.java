@@ -117,6 +117,7 @@ public final class InternalCardinality extends InternalNumericMetricsAggregation
             return aggregations.get(0);
         } else {
             return new InternalCardinality(name, reduced, getMetadata());
+
         }
     }
 

@@ -29,16 +29,13 @@
 
 package org.opensearch.common.inject.matcher;
 
-import org.opensearch.common.annotation.PublicApi;
-
 /**
  * Returns {@code true} or {@code false} for a given input.
  *
  * @author crazybob@google.com (Bob Lee)
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public interface Matcher<T> {
 
     /**

@@ -167,7 +167,7 @@ public class MinBucketIT extends ParameterizedStaticSettingsOpenSearchIntegTestC
         assertThat(minBucketValue, notNullValue());
         assertThat(minBucketValue.getName(), equalTo("min_bucket"));
         assertThat(minBucketValue.value(), equalTo(minValue));
-        assertThat(minBucketValue.keys(), equalTo(minKeys.toArray(new String[0])));
+        assertThat(minBucketValue.keys(), equalTo(minKeys.toArray(new String[minKeys.size()])));
     }
 
     public void testDocCountAsSubAgg() throws Exception {
@@ -219,7 +219,7 @@ public class MinBucketIT extends ParameterizedStaticSettingsOpenSearchIntegTestC
             assertThat(minBucketValue, notNullValue());
             assertThat(minBucketValue.getName(), equalTo("min_bucket"));
             assertThat(minBucketValue.value(), equalTo(minValue));
-            assertThat(minBucketValue.keys(), equalTo(minKeys.toArray(new String[0])));
+            assertThat(minBucketValue.keys(), equalTo(minKeys.toArray(new String[minKeys.size()])));
         }
     }
 
@@ -259,7 +259,7 @@ public class MinBucketIT extends ParameterizedStaticSettingsOpenSearchIntegTestC
         assertThat(minBucketValue, notNullValue());
         assertThat(minBucketValue.getName(), equalTo("min_bucket"));
         assertThat(minBucketValue.value(), equalTo(minValue));
-        assertThat(minBucketValue.keys(), equalTo(minKeys.toArray(new String[0])));
+        assertThat(minBucketValue.keys(), equalTo(minKeys.toArray(new String[minKeys.size()])));
     }
 
     public void testMetricAsSubAgg() throws Exception {
@@ -318,7 +318,7 @@ public class MinBucketIT extends ParameterizedStaticSettingsOpenSearchIntegTestC
             assertThat(minBucketValue, notNullValue());
             assertThat(minBucketValue.getName(), equalTo("min_bucket"));
             assertThat(minBucketValue.value(), equalTo(minValue));
-            assertThat(minBucketValue.keys(), equalTo(minKeys.toArray(new String[0])));
+            assertThat(minBucketValue.keys(), equalTo(minKeys.toArray(new String[minKeys.size()])));
         }
     }
 
@@ -376,7 +376,7 @@ public class MinBucketIT extends ParameterizedStaticSettingsOpenSearchIntegTestC
             assertThat(minBucketValue, notNullValue());
             assertThat(minBucketValue.getName(), equalTo("min_bucket"));
             assertThat(minBucketValue.value(), equalTo(minValue));
-            assertThat(minBucketValue.keys(), equalTo(minKeys.toArray(new String[0])));
+            assertThat(minBucketValue.keys(), equalTo(minKeys.toArray(new String[minKeys.size()])));
         }
     }
 
@@ -457,7 +457,7 @@ public class MinBucketIT extends ParameterizedStaticSettingsOpenSearchIntegTestC
             assertThat(minBucketValue, notNullValue());
             assertThat(minBucketValue.getName(), equalTo("min_histo_bucket"));
             assertThat(minBucketValue.value(), equalTo(minHistoValue));
-            assertThat(minBucketValue.keys(), equalTo(minHistoKeys.toArray(new String[0])));
+            assertThat(minBucketValue.keys(), equalTo(minHistoKeys.toArray(new String[minHistoKeys.size()])));
             if (minHistoValue < minTermsValue) {
                 minTermsValue = minHistoValue;
                 minTermsKeys = new ArrayList<>();
@@ -471,6 +471,6 @@ public class MinBucketIT extends ParameterizedStaticSettingsOpenSearchIntegTestC
         assertThat(minBucketValue, notNullValue());
         assertThat(minBucketValue.getName(), equalTo("min_terms_bucket"));
         assertThat(minBucketValue.value(), equalTo(minTermsValue));
-        assertThat(minBucketValue.keys(), equalTo(minTermsKeys.toArray(new String[0])));
+        assertThat(minBucketValue.keys(), equalTo(minTermsKeys.toArray(new String[minTermsKeys.size()])));
     }
 }

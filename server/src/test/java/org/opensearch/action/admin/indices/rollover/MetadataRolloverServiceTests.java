@@ -81,7 +81,6 @@ import org.opensearch.index.mapper.MappingLookup;
 import org.opensearch.index.mapper.MetadataFieldMapper;
 import org.opensearch.index.mapper.RoutingFieldMapper;
 import org.opensearch.index.shard.IndexEventListener;
-import org.opensearch.indices.DefaultRemoteStoreSettings;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.InvalidIndexNameException;
 import org.opensearch.indices.ShardLimitValidator;
@@ -717,7 +716,7 @@ public class MetadataRolloverServiceTests extends OpenSearchTestCase {
         try {
             ClusterService clusterService = ClusterServiceUtils.createClusterService(testThreadPool);
             Environment env = mock(Environment.class);
-            when(env.sharedDataDir()).thenReturn(null);
+            when(env.sharedDataFile()).thenReturn(null);
             AllocationService allocationService = mock(AllocationService.class);
             when(allocationService.reroute(any(ClusterState.class), any(String.class))).then(i -> i.getArguments()[0]);
             IndicesService indicesService = mockIndicesServices();
@@ -739,9 +738,7 @@ public class MetadataRolloverServiceTests extends OpenSearchTestCase {
                 null,
                 systemIndices,
                 false,
-                new AwarenessReplicaBalance(Settings.EMPTY, clusterService.getClusterSettings()),
-                DefaultRemoteStoreSettings.INSTANCE,
-                null
+                new AwarenessReplicaBalance(Settings.EMPTY, clusterService.getClusterSettings())
             );
             MetadataIndexAliasesService indexAliasesService = new MetadataIndexAliasesService(
                 clusterService,
@@ -847,7 +844,7 @@ public class MetadataRolloverServiceTests extends OpenSearchTestCase {
 
             ClusterService clusterService = ClusterServiceUtils.createClusterService(testThreadPool);
             Environment env = mock(Environment.class);
-            when(env.sharedDataDir()).thenReturn(null);
+            when(env.sharedDataFile()).thenReturn(null);
             AllocationService allocationService = mock(AllocationService.class);
             when(allocationService.reroute(any(ClusterState.class), any(String.class))).then(i -> i.getArguments()[0]);
             DocumentMapper documentMapper = mock(DocumentMapper.class);
@@ -879,9 +876,7 @@ public class MetadataRolloverServiceTests extends OpenSearchTestCase {
                 null,
                 systemIndices,
                 false,
-                new AwarenessReplicaBalance(Settings.EMPTY, clusterService.getClusterSettings()),
-                DefaultRemoteStoreSettings.INSTANCE,
-                null
+                new AwarenessReplicaBalance(Settings.EMPTY, clusterService.getClusterSettings())
             );
             MetadataIndexAliasesService indexAliasesService = new MetadataIndexAliasesService(
                 clusterService,
@@ -1059,9 +1054,7 @@ public class MetadataRolloverServiceTests extends OpenSearchTestCase {
             null,
             new SystemIndices(emptyMap()),
             false,
-            new AwarenessReplicaBalance(Settings.EMPTY, clusterService.getClusterSettings()),
-            DefaultRemoteStoreSettings.INSTANCE,
-            null
+            new AwarenessReplicaBalance(Settings.EMPTY, clusterService.getClusterSettings())
         );
         MetadataIndexAliasesService indexAliasesService = new MetadataIndexAliasesService(
             clusterService,

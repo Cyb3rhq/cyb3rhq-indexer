@@ -98,7 +98,7 @@ public interface BytesReference extends Comparable<BytesReference>, ToXContentFr
             while ((r = byteRefIterator.next()) != null) {
                 buffers.add(ByteBuffer.wrap(r.bytes, r.offset, r.length));
             }
-            return buffers.toArray(new ByteBuffer[0]);
+            return buffers.toArray(new ByteBuffer[buffers.size()]);
 
         } catch (IOException e) {
             // this is really an error since we don't do IO in our bytesreferences

@@ -35,6 +35,7 @@ package org.opensearch.tasks;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.ExceptionsHelper;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchSecurityException;
 import org.opensearch.action.StepListener;
 import org.opensearch.action.support.ChannelActionListener;
@@ -92,7 +93,7 @@ public class TaskCancellationService {
             Collection<DiscoveryNode> childrenNodes = taskManager.startBanOnChildrenNodes(task.getId(), () -> {
                 logger.trace("child tasks of parent [{}] are completed", taskId);
                 groupedListener.onResponse(null);
-            }, reason);
+            });
             taskManager.cancel(task, reason, () -> {
                 logger.trace("task [{}] is cancelled", taskId);
                 groupedListener.onResponse(null);
@@ -214,7 +215,11 @@ public class TaskCancellationService {
             parentTaskId = TaskId.readFromStream(in);
             ban = in.readBoolean();
             reason = ban ? in.readString() : null;
-            waitForCompletion = in.readBoolean();
+            if (in.getVersion().onOrAfter(LegacyESVersion.V_7_8_0)) {
+                waitForCompletion = in.readBoolean();
+            } else {
+                waitForCompletion = false;
+            }
         }
 
         @Override
@@ -225,7 +230,9 @@ public class TaskCancellationService {
             if (ban) {
                 out.writeString(reason);
             }
-            out.writeBoolean(waitForCompletion);
+            if (out.getVersion().onOrAfter(LegacyESVersion.V_7_8_0)) {
+                out.writeBoolean(waitForCompletion);
+            }
         }
     }
 

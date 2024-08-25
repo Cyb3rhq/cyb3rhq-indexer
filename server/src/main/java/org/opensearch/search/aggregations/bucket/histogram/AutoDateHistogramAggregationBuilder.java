@@ -32,6 +32,7 @@
 
 package org.opensearch.search.aggregations.bucket.histogram;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.common.Rounding;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.ParseField;
@@ -149,13 +150,17 @@ public class AutoDateHistogramAggregationBuilder extends ValuesSourceAggregation
     public AutoDateHistogramAggregationBuilder(StreamInput in) throws IOException {
         super(in);
         numBuckets = in.readVInt();
-        minimumIntervalExpression = in.readOptionalString();
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_3_0)) {
+            minimumIntervalExpression = in.readOptionalString();
+        }
     }
 
     @Override
     protected void innerWriteTo(StreamOutput out) throws IOException {
         out.writeVInt(numBuckets);
-        out.writeOptionalString(minimumIntervalExpression);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_3_0)) {
+            out.writeOptionalString(minimumIntervalExpression);
+        }
     }
 
     protected AutoDateHistogramAggregationBuilder(
@@ -316,7 +321,17 @@ public class AutoDateHistogramAggregationBuilder extends ValuesSourceAggregation
             roughEstimateDurationMillis = in.readVLong();
             innerIntervals = in.readIntArray();
             unitAbbreviation = in.readString();
-            dateTimeUnit = in.readString();
+            if (in.getVersion().onOrAfter(LegacyESVersion.V_7_3_0)) {
+                dateTimeUnit = in.readString();
+            } else {
+                /*
+                 * This *should* be safe because we only deserialize RoundingInfo
+                 * when reading result and results don't actually use this at all.
+                 * We just set it to something non-null to line up with the normal
+                 * ctor. "seconds" is the smallest unit anyway.
+                 */
+                dateTimeUnit = "second";
+            }
         }
 
         @Override
@@ -325,7 +340,9 @@ public class AutoDateHistogramAggregationBuilder extends ValuesSourceAggregation
             out.writeVLong(roughEstimateDurationMillis);
             out.writeIntArray(innerIntervals);
             out.writeString(unitAbbreviation);
-            out.writeString(dateTimeUnit);
+            if (out.getVersion().onOrAfter(LegacyESVersion.V_7_3_0)) {
+                out.writeString(dateTimeUnit);
+            }
         }
 
         public int getMaximumInnerInterval() {

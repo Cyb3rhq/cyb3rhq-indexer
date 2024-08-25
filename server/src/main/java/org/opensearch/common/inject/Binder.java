@@ -29,7 +29,6 @@
 
 package org.opensearch.common.inject;
 
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.inject.binder.AnnotatedBindingBuilder;
 import org.opensearch.common.inject.binder.AnnotatedConstantBindingBuilder;
 import org.opensearch.common.inject.binder.LinkedBindingBuilder;
@@ -199,9 +198,8 @@ import java.lang.annotation.Annotation;
  * @author jessewilson@google.com (Jesse Wilson)
  * @author kevinb@google.com (Kevin Bourrillion)
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public interface Binder {
 
     /**

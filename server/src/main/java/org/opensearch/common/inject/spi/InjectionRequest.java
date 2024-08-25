@@ -29,7 +29,6 @@
 
 package org.opensearch.common.inject.spi;
 
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.inject.Binder;
 import org.opensearch.common.inject.ConfigurationException;
 import org.opensearch.common.inject.TypeLiteral;
@@ -47,9 +46,8 @@ import java.util.Set;
  * @author mikeward@google.com (Mike Ward)
  * @since 2.0
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public final class InjectionRequest<T> implements Element {
 
     private final Object source;

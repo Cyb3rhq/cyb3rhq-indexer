@@ -70,7 +70,7 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 public abstract class TransportNodesAction<
     NodesRequest extends BaseNodesRequest<NodesRequest>,
     NodesResponse extends BaseNodesResponse,
-    NodeRequest extends TransportRequest,
+    NodeRequest extends BaseNodeRequest,
     NodeResponse extends BaseNodeResponse> extends HandledTransportAction<NodesRequest, NodesResponse> {
 
     protected final ThreadPool threadPool;
@@ -226,7 +226,6 @@ public abstract class TransportNodesAction<
         private final NodesRequest request;
         private final ActionListener<NodesResponse> listener;
         private final AtomicReferenceArray<Object> responses;
-        private final DiscoveryNode[] concreteNodes;
         private final AtomicInteger counter = new AtomicInteger();
         private final Task task;
 
@@ -239,18 +238,10 @@ public abstract class TransportNodesAction<
                 assert request.concreteNodes() != null;
             }
             this.responses = new AtomicReferenceArray<>(request.concreteNodes().length);
-            this.concreteNodes = request.concreteNodes();
-
-            if (request.getIncludeDiscoveryNodes() == false) {
-                // As we transfer the ownership of discovery nodes to route the request to into the AsyncAction class, we
-                // remove the list of DiscoveryNodes from the request. This reduces the payload of the request and improves
-                // the number of concrete nodes in the memory.
-                request.setConcreteNodes(null);
-            }
         }
 
         void start() {
-            final DiscoveryNode[] nodes = this.concreteNodes;
+            final DiscoveryNode[] nodes = request.concreteNodes();
             if (nodes.length == 0) {
                 // nothing to notify
                 threadPool.generic().execute(() -> listener.onResponse(newResponse(request, responses)));
@@ -269,6 +260,7 @@ public abstract class TransportNodesAction<
                     if (task != null) {
                         nodeRequest.setParentTask(clusterService.localNode().getId(), task.getId());
                     }
+
                     transportService.sendRequest(
                         node,
                         getTransportNodeAction(node),

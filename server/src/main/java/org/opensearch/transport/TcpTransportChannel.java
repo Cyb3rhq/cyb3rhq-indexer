@@ -50,7 +50,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class TcpTransportChannel extends BaseTcpTransportChannel {
 
     private final AtomicBoolean released = new AtomicBoolean();
-    private final ProtocolOutboundHandler outboundHandler;
+    private final OutboundHandler outboundHandler;
     private final String action;
     private final long requestId;
     private final Version version;
@@ -60,7 +60,7 @@ public final class TcpTransportChannel extends BaseTcpTransportChannel {
     private final Releasable breakerRelease;
 
     TcpTransportChannel(
-        ProtocolOutboundHandler outboundHandler,
+        OutboundHandler outboundHandler,
         TcpChannel channel,
         String action,
         long requestId,

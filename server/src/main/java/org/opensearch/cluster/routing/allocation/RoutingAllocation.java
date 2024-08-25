@@ -55,7 +55,6 @@ import java.util.Set;
 
 import static java.util.Collections.emptySet;
 import static java.util.Collections.unmodifiableSet;
-import static org.opensearch.node.remotestore.RemoteStoreNodeService.isMigratingToRemoteStore;
 
 /**
  * The {@link RoutingAllocation} keep the state of the current allocation
@@ -126,9 +125,6 @@ public class RoutingAllocation {
         this.clusterInfo = clusterInfo;
         this.shardSizeInfo = shardSizeInfo;
         this.currentNanoTime = currentNanoTime;
-        if (isMigratingToRemoteStore(metadata)) {
-            indexMetadataUpdater.setOngoingRemoteStoreMigration(true);
-        }
     }
 
     /** returns the nano time captured at the beginning of the allocation. used to make sure all time based decisions are aligned */
@@ -271,7 +267,7 @@ public class RoutingAllocation {
      * Returns updated {@link Metadata} based on the changes that were made to the routing nodes
      */
     public Metadata updateMetadataWithRoutingChanges(RoutingTable newRoutingTable) {
-        return indexMetadataUpdater.applyChanges(metadata, newRoutingTable, nodes());
+        return indexMetadataUpdater.applyChanges(metadata, newRoutingTable);
     }
 
     /**

@@ -36,11 +36,9 @@ import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.util.concurrent.ReleasableLock;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -398,12 +396,7 @@ public class Cache<K, V> {
         if (entry == null) {
             return null;
         } else {
-            List<RemovalNotification<K, V>> removalNotifications = promote(entry, now).v2();
-            if (!removalNotifications.isEmpty()) {
-                for (RemovalNotification<K, V> removalNotification : removalNotifications) {
-                    removalListener.onRemoval(removalNotification);
-                }
-            }
+            promote(entry, now);
             return entry.value;
         }
     }
@@ -453,14 +446,8 @@ public class Cache<K, V> {
 
         BiFunction<? super Entry<K, V>, Throwable, ? extends V> handler = (ok, ex) -> {
             if (ok != null) {
-                List<RemovalNotification<K, V>> removalNotifications = new ArrayList<>();
                 try (ReleasableLock ignored = lruLock.acquire()) {
-                    removalNotifications = promote(ok, now).v2();
-                }
-                if (!removalNotifications.isEmpty()) {
-                    for (RemovalNotification<K, V> removalNotification : removalNotifications) {
-                        removalListener.onRemoval(removalNotification);
-                    }
+                    promote(ok, now);
                 }
                 return ok.value;
             } else {
@@ -525,22 +512,16 @@ public class Cache<K, V> {
         CacheSegment<K, V> segment = getCacheSegment(key);
         Tuple<Entry<K, V>, Entry<K, V>> tuple = segment.put(key, value, now);
         boolean replaced = false;
-        List<RemovalNotification<K, V>> removalNotifications = new ArrayList<>();
         try (ReleasableLock ignored = lruLock.acquire()) {
             if (tuple.v2() != null && tuple.v2().state == State.EXISTING) {
                 if (unlink(tuple.v2())) {
                     replaced = true;
                 }
             }
-            removalNotifications = promote(tuple.v1(), now).v2();
+            promote(tuple.v1(), now);
         }
         if (replaced) {
-            removalNotifications.add(new RemovalNotification<>(tuple.v2().key, tuple.v2().value, RemovalReason.REPLACED));
-        }
-        if (!removalNotifications.isEmpty()) {
-            for (RemovalNotification<K, V> removalNotification : removalNotifications) {
-                removalListener.onRemoval(removalNotification);
-            }
+            removalListener.onRemoval(new RemovalNotification<>(tuple.v2().key, tuple.v2().value, RemovalReason.REPLACED));
         }
     }
 
@@ -786,17 +767,8 @@ public class Cache<K, V> {
         }
     }
 
-    /**
-     * Promotes the desired entry to the head of the lru list and tries to see if it needs to evict any entries in
-     * case the cache size is exceeding or the entry got expired.
-     * @param entry Entry to be promoted
-     * @param now the current time
-     * @return Returns a tuple. v1 signifies whether an entry got promoted, v2 signifies the list of removal
-     * notifications that the callers needs to handle.
-     */
-    private Tuple<Boolean, List<RemovalNotification<K, V>>> promote(Entry<K, V> entry, long now) {
+    private boolean promote(Entry<K, V> entry, long now) {
         boolean promoted = true;
-        List<RemovalNotification<K, V>> removalNotifications = new ArrayList<>();
         try (ReleasableLock ignored = lruLock.acquire()) {
             switch (entry.state) {
                 case DELETED:
@@ -810,21 +782,10 @@ public class Cache<K, V> {
                     break;
             }
             if (promoted) {
-                while (tail != null && shouldPrune(tail, now)) {
-                    Entry<K, V> entryToBeRemoved = tail;
-                    CacheSegment<K, V> segment = getCacheSegment(entryToBeRemoved.key);
-                    if (segment != null) {
-                        segment.remove(entryToBeRemoved.key, entryToBeRemoved.value, f -> {});
-                    }
-                    if (unlink(entryToBeRemoved)) {
-                        removalNotifications.add(
-                            new RemovalNotification<>(entryToBeRemoved.key, entryToBeRemoved.value, RemovalReason.EVICTED)
-                        );
-                    }
-                }
+                evict(now);
             }
         }
-        return new Tuple<>(promoted, removalNotifications);
+        return promoted;
     }
 
     private void evict(long now) {
@@ -933,10 +894,6 @@ public class Cache<K, V> {
             unlink(entry);
             linkAtHead(entry);
         }
-    }
-
-    public ToLongBiFunction<K, V> getWeigher() {
-        return weigher;
     }
 
     private CacheSegment<K, V> getCacheSegment(K key) {

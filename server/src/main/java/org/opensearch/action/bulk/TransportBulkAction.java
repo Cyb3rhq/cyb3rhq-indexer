@@ -36,6 +36,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.SparseFixedBitSet;
 import org.opensearch.ExceptionsHelper;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.ResourceAlreadyExistsException;
 import org.opensearch.Version;
@@ -471,7 +472,11 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         createIndexRequest.index(index);
         createIndexRequest.cause("auto(bulk api)");
         createIndexRequest.clusterManagerNodeTimeout(timeout);
-        client.execute(AutoCreateAction.INSTANCE, createIndexRequest, listener);
+        if (minNodeVersion.onOrAfter(LegacyESVersion.V_7_8_0)) {
+            client.execute(AutoCreateAction.INSTANCE, createIndexRequest, listener);
+        } else {
+            client.admin().indices().create(createIndexRequest, listener);
+        }
     }
 
     private boolean setResponseFailureIfIndexMatches(
@@ -637,7 +642,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 BulkShardRequest bulkShardRequest = new BulkShardRequest(
                     shardId,
                     bulkRequest.getRefreshPolicy(),
-                    requests.toArray(new BulkItemRequest[0])
+                    requests.toArray(new BulkItemRequest[requests.size()])
                 );
                 bulkShardRequest.waitForActiveShards(bulkRequest.waitForActiveShards());
                 bulkShardRequest.timeout(bulkRequest.timeout());
@@ -923,8 +928,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 }
             },
             bulkRequestModifier::markItemAsDropped,
-            executorName,
-            original
+            executorName
         );
     }
 

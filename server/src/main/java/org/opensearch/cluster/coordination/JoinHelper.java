@@ -159,6 +159,7 @@ public class JoinHelper {
             allocationService,
             logger,
             rerouteService,
+            transportService,
             remoteStoreNodeService
         ) {
 

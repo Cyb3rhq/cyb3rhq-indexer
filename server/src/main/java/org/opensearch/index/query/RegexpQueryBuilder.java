@@ -38,6 +38,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.RegexpQuery;
 import org.apache.lucene.util.automaton.Operations;
 import org.apache.lucene.util.automaton.RegExp;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.common.lucene.BytesRefs;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.core.ParseField;
@@ -111,7 +112,9 @@ public class RegexpQueryBuilder extends AbstractQueryBuilder<RegexpQueryBuilder>
         syntaxFlagsValue = in.readVInt();
         maxDeterminizedStates = in.readVInt();
         rewrite = in.readOptionalString();
-        caseInsensitive = in.readBoolean();
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            caseInsensitive = in.readBoolean();
+        }
     }
 
     @Override
@@ -121,7 +124,9 @@ public class RegexpQueryBuilder extends AbstractQueryBuilder<RegexpQueryBuilder>
         out.writeVInt(syntaxFlagsValue);
         out.writeVInt(maxDeterminizedStates);
         out.writeOptionalString(rewrite);
-        out.writeBoolean(caseInsensitive);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            out.writeBoolean(caseInsensitive);
+        }
     }
 
     /** Returns the field name used in this query. */

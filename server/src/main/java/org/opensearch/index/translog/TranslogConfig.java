@@ -59,7 +59,6 @@ public final class TranslogConfig {
     private final Path translogPath;
     private final ByteSizeValue bufferSize;
     private final String nodeId;
-    private final boolean seedRemote;
 
     /**
      * Creates a new TranslogConfig instance
@@ -67,17 +66,9 @@ public final class TranslogConfig {
      * @param translogPath the path to use for the transaction log files
      * @param indexSettings the index settings used to set internal variables
      * @param bigArrays a bigArrays instance used for temporarily allocating write operations
-     * @param seedRemote boolean denoting whether remote store needs to be seeded as part of remote migration
      */
-    public TranslogConfig(
-        ShardId shardId,
-        Path translogPath,
-        IndexSettings indexSettings,
-        BigArrays bigArrays,
-        String nodeId,
-        boolean seedRemote
-    ) {
-        this(shardId, translogPath, indexSettings, bigArrays, DEFAULT_BUFFER_SIZE, nodeId, seedRemote);
+    public TranslogConfig(ShardId shardId, Path translogPath, IndexSettings indexSettings, BigArrays bigArrays, String nodeId) {
+        this(shardId, translogPath, indexSettings, bigArrays, DEFAULT_BUFFER_SIZE, nodeId);
     }
 
     TranslogConfig(
@@ -86,8 +77,7 @@ public final class TranslogConfig {
         IndexSettings indexSettings,
         BigArrays bigArrays,
         ByteSizeValue bufferSize,
-        String nodeId,
-        boolean seedRemote
+        String nodeId
     ) {
         this.bufferSize = bufferSize;
         this.indexSettings = indexSettings;
@@ -95,7 +85,6 @@ public final class TranslogConfig {
         this.translogPath = translogPath;
         this.bigArrays = bigArrays;
         this.nodeId = nodeId;
-        this.seedRemote = seedRemote;
     }
 
     /**
@@ -135,9 +124,5 @@ public final class TranslogConfig {
 
     public String getNodeId() {
         return nodeId;
-    }
-
-    public boolean shouldSeedRemote() {
-        return seedRemote;
     }
 }

@@ -95,7 +95,7 @@ public class RestClusterGetSettingsAction extends BaseRestHandler {
         clusterStateRequest.clusterManagerNodeTimeout(
             request.paramAsTime("cluster_manager_timeout", clusterStateRequest.clusterManagerNodeTimeout())
         );
-        parseDeprecatedMasterTimeoutParameter(clusterStateRequest, request, deprecationLogger, getName());
+        parseDeprecatedMasterTimeoutParameter(clusterStateRequest, request);
         return channel -> client.admin().cluster().state(clusterStateRequest, new RestBuilderListener<ClusterStateResponse>(channel) {
             @Override
             public RestResponse buildResponse(ClusterStateResponse response, XContentBuilder builder) throws Exception {

@@ -32,6 +32,7 @@
 
 package org.opensearch.search.aggregations.support;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.common.TriFunction;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.Strings;
@@ -88,7 +89,11 @@ public class MultiValuesSourceFieldConfig extends BaseMultiValuesSourceFieldConf
 
     public MultiValuesSourceFieldConfig(StreamInput in) throws IOException {
         super(in);
-        this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_8_0)) {
+            this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
+        } else {
+            this.filter = null;
+        }
     }
 
     public QueryBuilder getFilter() {
@@ -97,7 +102,9 @@ public class MultiValuesSourceFieldConfig extends BaseMultiValuesSourceFieldConf
 
     @Override
     public void doWriteTo(StreamOutput out) throws IOException {
-        out.writeOptionalNamedWriteable(filter);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_8_0)) {
+            out.writeOptionalNamedWriteable(filter);
+        }
     }
 
     @Override

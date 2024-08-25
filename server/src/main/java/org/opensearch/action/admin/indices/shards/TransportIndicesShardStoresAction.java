@@ -105,8 +105,7 @@ public class TransportIndicesShardStoresAction extends TransportClusterManagerNo
             threadPool,
             actionFilters,
             IndicesShardStoresRequest::new,
-            indexNameExpressionResolver,
-            true
+            indexNameExpressionResolver
         );
         this.listShardStoresInfo = listShardStoresInfo;
     }

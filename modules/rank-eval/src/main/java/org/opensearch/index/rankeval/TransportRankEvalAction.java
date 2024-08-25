@@ -148,7 +148,7 @@ public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequ
             if (summaryFields.isEmpty()) {
                 evaluationRequest.fetchSource(false);
             } else {
-                evaluationRequest.fetchSource(summaryFields.toArray(new String[0]), new String[0]);
+                evaluationRequest.fetchSource(summaryFields.toArray(new String[summaryFields.size()]), new String[0]);
             }
             SearchRequest searchRequest = new SearchRequest(request.indices(), evaluationRequest);
             searchRequest.indicesOptions(request.indicesOptions());
@@ -158,7 +158,12 @@ public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequ
         assert ratedRequestsInSearch.size() == msearchRequest.requests().size();
         client.multiSearch(
             msearchRequest,
-            new RankEvalActionListener(listener, metric, ratedRequestsInSearch.toArray(new RatedRequest[0]), errors)
+            new RankEvalActionListener(
+                listener,
+                metric,
+                ratedRequestsInSearch.toArray(new RatedRequest[ratedRequestsInSearch.size()]),
+                errors
+            )
         );
     }
 

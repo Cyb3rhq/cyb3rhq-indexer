@@ -62,6 +62,7 @@ import static org.opensearch.common.settings.Settings.readSettingsFromStream;
 import static org.opensearch.common.settings.Settings.writeSettingsToStream;
 import static org.opensearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
 import static org.opensearch.core.common.Strings.EMPTY_ARRAY;
+import static org.opensearch.snapshots.SnapshotInfo.METADATA_FIELD_INTRODUCED;
 
 /**
  * Create snapshot request
@@ -126,7 +127,9 @@ public class CreateSnapshotRequest extends ClusterManagerNodeRequest<CreateSnaps
         includeGlobalState = in.readBoolean();
         waitForCompletion = in.readBoolean();
         partial = in.readBoolean();
-        userMetadata = in.readMap();
+        if (in.getVersion().onOrAfter(METADATA_FIELD_INTRODUCED)) {
+            userMetadata = in.readMap();
+        }
     }
 
     @Override
@@ -140,7 +143,9 @@ public class CreateSnapshotRequest extends ClusterManagerNodeRequest<CreateSnaps
         out.writeBoolean(includeGlobalState);
         out.writeBoolean(waitForCompletion);
         out.writeBoolean(partial);
-        out.writeMap(userMetadata);
+        if (out.getVersion().onOrAfter(METADATA_FIELD_INTRODUCED)) {
+            out.writeMap(userMetadata);
+        }
     }
 
     @Override
@@ -256,7 +261,7 @@ public class CreateSnapshotRequest extends ClusterManagerNodeRequest<CreateSnaps
      * @return this request
      */
     public CreateSnapshotRequest indices(List<String> indices) {
-        this.indices = indices.toArray(new String[0]);
+        this.indices = indices.toArray(new String[indices.size()]);
         return this;
     }
 

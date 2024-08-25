@@ -46,9 +46,6 @@ import java.io.IOException;
 
 import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
 
-/**
- * The suggestion responses corresponding with the suggestions in the request.
- */
 public class CustomSuggestion extends Suggest.Suggestion<CustomSuggestion.Entry> {
 
     /**
@@ -57,31 +54,15 @@ public class CustomSuggestion extends Suggest.Suggestion<CustomSuggestion.Entry>
      */
     public static final int TYPE = 999;
 
-    /**
-     * A meaningless value used to test that plugin suggesters can add fields to their Suggestion types.
-     */
     public static final ParseField DUMMY = new ParseField("dummy");
 
     private String dummy;
 
-    /**
-     * Instantiate this object with the specified name, size, and value for the configured field.
-     *
-     * @param name The name of the suggestion as is defined in the request.
-     * @param size The suggested term size specified in request, only used for merging shard responses.
-     * @param dummy The added custom suggestion type.
-     */
     public CustomSuggestion(String name, int size, String dummy) {
         super(name, size);
         this.dummy = dummy;
     }
 
-    /**
-     * Instantiate this object from a stream.
-     *
-     * @param in Input to read the value from
-     * @throws IOException on failure to read the value.
-     */
     public CustomSuggestion(StreamInput in) throws IOException {
         super(in);
         dummy = in.readString();
@@ -108,8 +89,6 @@ public class CustomSuggestion extends Suggest.Suggestion<CustomSuggestion.Entry>
      * <p>
      * This can't be serialized to xcontent because Suggestions appear in xcontent as an array of entries, so there is no place
      * to add a custom field. But we can still use a custom field internally and use it to define a Suggestion's behavior
-     *
-     * @return the value.
      */
     public String getDummy() {
         return dummy;
@@ -120,23 +99,12 @@ public class CustomSuggestion extends Suggest.Suggestion<CustomSuggestion.Entry>
         return new Entry(in);
     }
 
-    /**
-     * Instantiate a CustomSuggestion from XContent.
-     *
-     * @param parser The XContent parser to use
-     * @param name Tne name of the suggestion
-     * @return A new CustomSuggestion instance for the specified name.
-     * @throws IOException on deserialization error.
-     */
     public static CustomSuggestion fromXContent(XContentParser parser, String name) throws IOException {
         CustomSuggestion suggestion = new CustomSuggestion(name, -1, null);
         parseEntries(parser, suggestion, Entry::fromXContent);
         return suggestion;
     }
 
-    /**
-     * Represents a part from the suggest text with suggested options.
-     */
     public static class Entry extends Suggest.Suggestion.Entry<CustomSuggestion.Entry.Option> {
 
         private static final ObjectParser<Entry, Void> PARSER = new ObjectParser<>("CustomSuggestionEntryParser", true, Entry::new);
@@ -153,30 +121,13 @@ public class CustomSuggestion extends Suggest.Suggestion<CustomSuggestion.Entry>
 
         private String dummy;
 
-        /**
-         * Instantiate this object.
-         */
         public Entry() {}
 
-        /**
-         * Instantiate this object from the given text, offset, length, and additional dummy field.
-         *
-         * @param text the text originating from the suggest text.
-         * @param offset the start offset for this entry in the suggest text.
-         * @param length the length for this entry in the suggest text.
-         * @param dummy the additional custom field.
-         */
         public Entry(Text text, int offset, int length, String dummy) {
             super(text, offset, length);
             this.dummy = dummy;
         }
 
-        /**
-         * Instantiate this object from a stream.
-         *
-         * @param in Input to read the value from
-         * @throws IOException on failure to read the value.
-         */
         public Entry(StreamInput in) throws IOException {
             super(in);
             dummy = in.readString();
@@ -195,8 +146,6 @@ public class CustomSuggestion extends Suggest.Suggestion<CustomSuggestion.Entry>
 
         /*
          * the value of dummy will always be the same, so this just tests that we can merge entries with custom fields
-         *
-         * @InheritDoc
          */
         @Override
         protected void merge(Suggest.Suggestion.Entry<Option> otherEntry) {
@@ -205,8 +154,6 @@ public class CustomSuggestion extends Suggest.Suggestion<CustomSuggestion.Entry>
 
         /**
          * Meaningless field used to test that plugin suggesters can add fields to their entries
-         *
-         * @return the dummy field value
          */
         public String getDummy() {
             return dummy;
@@ -219,19 +166,10 @@ public class CustomSuggestion extends Suggest.Suggestion<CustomSuggestion.Entry>
             return builder;
         }
 
-        /**
-         * Create a Suggestion Entry from XContent
-         *
-         * @param parser The parser to use
-         * @return the Suggestion Entry
-         */
         public static Entry fromXContent(XContentParser parser) {
             return PARSER.apply(parser, null);
         }
 
-        /**
-         * An Entry Option to use with a Suggestion.
-         */
         public static class Option extends Suggest.Suggestion.Entry.Option {
 
             private static final ConstructingObjectParser<Option, Void> PARSER = new ConstructingObjectParser<>(
@@ -253,24 +191,11 @@ public class CustomSuggestion extends Suggest.Suggestion<CustomSuggestion.Entry>
 
             private String dummy;
 
-            /**
-             * Instantiate this object from the specified text, score, and dummy field
-             *
-             * @param text The option text.
-             * @param score The option score.
-             * @param dummy The value of the dummy field.
-             */
             public Option(Text text, float score, String dummy) {
                 super(text, score);
                 this.dummy = dummy;
             }
 
-            /**
-             * Instantiate this object from a stream.
-             *
-             * @param in Input to read the value from
-             * @throws IOException on failure to read the value.
-             */
             public Option(StreamInput in) throws IOException {
                 super(in);
                 dummy = in.readString();
@@ -305,11 +230,6 @@ public class CustomSuggestion extends Suggest.Suggestion<CustomSuggestion.Entry>
                 return builder;
             }
 
-            /**
-             * Instantiate an Option from XContent.
-             *
-             * @param parser The XContent parser to use
-             */
             public static Option fromXContent(XContentParser parser) {
                 return PARSER.apply(parser, null);
             }

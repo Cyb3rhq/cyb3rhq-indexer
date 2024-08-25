@@ -476,22 +476,10 @@ public class Task {
         throw new IllegalStateException("cannot update final values if active thread resource entry is not present");
     }
 
-    public ThreadResourceInfo getActiveThreadResourceInfo(long threadId, ResourceStatsType statsType) {
-        final List<ThreadResourceInfo> threadResourceInfoList = resourceStats.get(threadId);
-        if (threadResourceInfoList != null) {
-            for (ThreadResourceInfo threadResourceInfo : threadResourceInfoList) {
-                if (threadResourceInfo.getStatsType() == statsType && threadResourceInfo.isActive()) {
-                    return threadResourceInfo;
-                }
-            }
-        }
-        return null;
-    }
-
     /**
      * Individual tasks can override this if they want to support task resource tracking. We just need to make sure that
      * the ThreadPool on which the task runs on have runnable wrapper similar to
-     * {@link org.opensearch.common.util.concurrent.OpenSearchExecutors#newResizable}
+     * {@link org.opensearch.common.util.concurrent.OpenSearchExecutors#newAutoQueueFixed}
      *
      * @return true if resource tracking is supported by the task
      */

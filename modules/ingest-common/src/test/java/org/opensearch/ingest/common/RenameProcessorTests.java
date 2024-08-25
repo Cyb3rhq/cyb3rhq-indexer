@@ -59,7 +59,7 @@ public class RenameProcessorTests extends OpenSearchTestCase {
         do {
             newFieldName = RandomDocumentPicks.randomFieldName(random());
         } while (RandomDocumentPicks.canAddField(newFieldName, ingestDocument) == false || newFieldName.equals(fieldName));
-        Processor processor = createRenameProcessor(fieldName, newFieldName, false, false);
+        Processor processor = createRenameProcessor(fieldName, newFieldName, false);
         processor.execute(ingestDocument);
         assertThat(ingestDocument.getFieldValue(newFieldName, Object.class), equalTo(fieldValue));
     }
@@ -77,7 +77,7 @@ public class RenameProcessorTests extends OpenSearchTestCase {
         document.put("one", one);
         IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
 
-        Processor processor = createRenameProcessor("list.0", "item", false, false);
+        Processor processor = createRenameProcessor("list.0", "item", false);
         processor.execute(ingestDocument);
         Object actualObject = ingestDocument.getSourceAndMetadata().get("list");
         assertThat(actualObject, instanceOf(List.class));
@@ -90,7 +90,7 @@ public class RenameProcessorTests extends OpenSearchTestCase {
         assertThat(actualObject, instanceOf(String.class));
         assertThat(actualObject, equalTo("item1"));
 
-        processor = createRenameProcessor("list.0", "list.3", false, randomBoolean());
+        processor = createRenameProcessor("list.0", "list.3", false);
         try {
             processor.execute(ingestDocument);
             fail("processor execute should have failed");
@@ -105,7 +105,7 @@ public class RenameProcessorTests extends OpenSearchTestCase {
     public void testRenameNonExistingField() throws Exception {
         IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), new HashMap<>());
         String fieldName = RandomDocumentPicks.randomFieldName(random());
-        Processor processor = createRenameProcessor(fieldName, RandomDocumentPicks.randomFieldName(random()), false, false);
+        Processor processor = createRenameProcessor(fieldName, RandomDocumentPicks.randomFieldName(random()), false);
         try {
             processor.execute(ingestDocument);
             fail("processor execute should have failed");
@@ -114,7 +114,7 @@ public class RenameProcessorTests extends OpenSearchTestCase {
         }
 
         // when using template snippet, the resolved field path maybe empty
-        processor = createRenameProcessor("", RandomDocumentPicks.randomFieldName(random()), false, false);
+        processor = createRenameProcessor("", RandomDocumentPicks.randomFieldName(random()), false);
         try {
             processor.execute(ingestDocument);
             fail("processor execute should have failed");
@@ -127,36 +127,30 @@ public class RenameProcessorTests extends OpenSearchTestCase {
         IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(random(), new HashMap<>());
         IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
         String fieldName = RandomDocumentPicks.randomFieldName(random());
-        Processor processor = createRenameProcessor(fieldName, RandomDocumentPicks.randomFieldName(random()), true, false);
+        Processor processor = createRenameProcessor(fieldName, RandomDocumentPicks.randomFieldName(random()), true);
         processor.execute(ingestDocument);
         assertIngestDocument(originalIngestDocument, ingestDocument);
 
         // when using template snippet, the resolved field path maybe empty
-        processor = createRenameProcessor("", RandomDocumentPicks.randomFieldName(random()), true, false);
+        processor = createRenameProcessor("", RandomDocumentPicks.randomFieldName(random()), true);
         processor.execute(ingestDocument);
         assertIngestDocument(originalIngestDocument, ingestDocument);
     }
 
     public void testRenameNewFieldAlreadyExists() throws Exception {
         IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String field = RandomDocumentPicks.randomExistingFieldName(random(), ingestDocument);
-        Object fieldValue = ingestDocument.getFieldValue(field, Object.class);
-        String targetField = RandomDocumentPicks.addRandomField(random(), ingestDocument, RandomDocumentPicks.randomFieldValue(random()));
-
-        Processor processor = createRenameProcessor(field, targetField, false, false);
+        String fieldName = RandomDocumentPicks.randomExistingFieldName(random(), ingestDocument);
+        Processor processor = createRenameProcessor(
+            RandomDocumentPicks.randomExistingFieldName(random(), ingestDocument),
+            fieldName,
+            false
+        );
         try {
             processor.execute(ingestDocument);
             fail("processor execute should have failed");
         } catch (IllegalArgumentException e) {
-            assertThat(e.getMessage(), equalTo("field [" + targetField + "] already exists"));
+            assertThat(e.getMessage(), equalTo("field [" + fieldName + "] already exists"));
         }
-
-        Processor processorWithOverrideTarget = createRenameProcessor(field, targetField, false, true);
-
-        processorWithOverrideTarget.execute(ingestDocument);
-        assertThat(ingestDocument.hasField(field), equalTo(false));
-        assertThat(ingestDocument.hasField(targetField), equalTo(true));
-        assertThat(ingestDocument.getFieldValue(targetField, Object.class), equalTo(fieldValue));
     }
 
     public void testRenameExistingFieldNullValue() throws Exception {
@@ -164,7 +158,7 @@ public class RenameProcessorTests extends OpenSearchTestCase {
         String fieldName = RandomDocumentPicks.randomFieldName(random());
         ingestDocument.setFieldValue(fieldName, null);
         String newFieldName = randomValueOtherThanMany(ingestDocument::hasField, () -> RandomDocumentPicks.randomFieldName(random()));
-        Processor processor = createRenameProcessor(fieldName, newFieldName, false, false);
+        Processor processor = createRenameProcessor(fieldName, newFieldName, false);
         processor.execute(ingestDocument);
         if (newFieldName.startsWith(fieldName + '.')) {
             assertThat(ingestDocument.getFieldValue(fieldName, Object.class), instanceOf(Map.class));
@@ -188,7 +182,7 @@ public class RenameProcessorTests extends OpenSearchTestCase {
         source.put("list", Collections.singletonList("item"));
 
         IngestDocument ingestDocument = new IngestDocument(source, Collections.emptyMap());
-        Processor processor = createRenameProcessor("list", "new_field", false, false);
+        Processor processor = createRenameProcessor("list", "new_field", false);
         try {
             processor.execute(ingestDocument);
             fail("processor execute should have failed");
@@ -212,7 +206,7 @@ public class RenameProcessorTests extends OpenSearchTestCase {
         source.put("list", Collections.singletonList("item"));
 
         IngestDocument ingestDocument = new IngestDocument(source, Collections.emptyMap());
-        Processor processor = createRenameProcessor("list", "new_field", false, false);
+        Processor processor = createRenameProcessor("list", "new_field", false);
         try {
             processor.execute(ingestDocument);
             fail("processor execute should have failed");
@@ -227,12 +221,12 @@ public class RenameProcessorTests extends OpenSearchTestCase {
         Map<String, Object> source = new HashMap<>();
         source.put("foo", "bar");
         IngestDocument ingestDocument = new IngestDocument(source, Collections.emptyMap());
-        Processor processor1 = createRenameProcessor("foo", "foo.bar", false, false);
+        Processor processor1 = createRenameProcessor("foo", "foo.bar", false);
         processor1.execute(ingestDocument);
         assertThat(ingestDocument.getFieldValue("foo", Map.class), equalTo(Collections.singletonMap("bar", "bar")));
         assertThat(ingestDocument.getFieldValue("foo.bar", String.class), equalTo("bar"));
 
-        Processor processor2 = createRenameProcessor("foo.bar", "foo.bar.baz", false, false);
+        Processor processor2 = createRenameProcessor("foo.bar", "foo.bar.baz", false);
         processor2.execute(ingestDocument);
         assertThat(
             ingestDocument.getFieldValue("foo", Map.class),
@@ -242,19 +236,18 @@ public class RenameProcessorTests extends OpenSearchTestCase {
         assertThat(ingestDocument.getFieldValue("foo.bar.baz", String.class), equalTo("bar"));
 
         // for fun lets try to restore it (which don't allow today)
-        Processor processor3 = createRenameProcessor("foo.bar.baz", "foo", false, false);
+        Processor processor3 = createRenameProcessor("foo.bar.baz", "foo", false);
         Exception e = expectThrows(IllegalArgumentException.class, () -> processor3.execute(ingestDocument));
         assertThat(e.getMessage(), equalTo("field [foo] already exists"));
     }
 
-    private RenameProcessor createRenameProcessor(String field, String targetField, boolean ignoreMissing, boolean overrideTarget) {
+    private RenameProcessor createRenameProcessor(String field, String targetField, boolean ignoreMissing) {
         return new RenameProcessor(
             randomAlphaOfLength(10),
             null,
             new TestTemplateService.MockTemplateScript.Factory(field),
             new TestTemplateService.MockTemplateScript.Factory(targetField),
-            ignoreMissing,
-            overrideTarget
+            ignoreMissing
         );
     }
 }

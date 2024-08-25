@@ -371,7 +371,7 @@ public final class BulkRequestParser {
                         }
                         IndexRequest upsertRequest = updateRequest.upsertRequest();
                         if (upsertRequest != null) {
-                            upsertRequest.setPipeline(pipeline);
+                            upsertRequest.setPipeline(defaultPipeline);
                         }
 
                         updateRequestConsumer.accept(updateRequest);

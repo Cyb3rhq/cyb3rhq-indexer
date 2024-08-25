@@ -18,6 +18,7 @@ import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.index.store.StoreStats;
 import org.opensearch.indices.recovery.RecoveryState;
 
 import java.io.IOException;
@@ -307,11 +308,6 @@ public final class ReplicationLuceneIndex extends ReplicationTimer implements To
         return filesDetails.get(dest);
     }
 
-    /**
-     * Details about the files
-     *
-     * @opensearch.internal
-     */
     private static final class FilesDetails implements ToXContentFragment, Writeable {
         protected final Map<String, FileMetadata> fileMetadataMap = new HashMap<>();
         protected boolean complete;
@@ -324,7 +320,15 @@ public final class ReplicationLuceneIndex extends ReplicationTimer implements To
                 FileMetadata file = new FileMetadata(in);
                 fileMetadataMap.put(file.name, file);
             }
-            complete = in.readBoolean();
+            if (in.getVersion().onOrAfter(StoreStats.RESERVED_BYTES_VERSION)) {
+                complete = in.readBoolean();
+            } else {
+                // This flag is used by disk-based allocation to decide whether the remaining bytes measurement is accurate or not; if not
+                // then it falls back on an estimate. There's only a very short window in which the file details are present but incomplete
+                // so this is a reasonable approximation, and the stats reported to the disk-based allocator don't hit this code path
+                // anyway since they always use IndexShard#getRecoveryState which is never transported over the wire.
+                complete = fileMetadataMap.isEmpty() == false;
+            }
         }
 
         @Override
@@ -334,7 +338,9 @@ public final class ReplicationLuceneIndex extends ReplicationTimer implements To
             for (FileMetadata file : files) {
                 file.writeTo(out);
             }
-            out.writeBoolean(complete);
+            if (out.getVersion().onOrAfter(StoreStats.RESERVED_BYTES_VERSION)) {
+                out.writeBoolean(complete);
+            }
         }
 
         @Override
@@ -501,8 +507,6 @@ public final class ReplicationLuceneIndex extends ReplicationTimer implements To
 
     /**
      * Duplicates many of Field names in {@link RecoveryState}
-     *
-     * @opensearch.internal
      */
     static final class Fields {
         static final String TOTAL_TIME = "total_time";

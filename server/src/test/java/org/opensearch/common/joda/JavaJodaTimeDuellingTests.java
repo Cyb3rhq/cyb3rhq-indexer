@@ -51,7 +51,6 @@ import java.time.temporal.TemporalAccessor;
 import java.util.Locale;
 
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.startsWith;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 
@@ -187,7 +186,7 @@ public class JavaJodaTimeDuellingTests extends OpenSearchTestCase {
             .parseDateTime("2019-01-01T01:01:01.001+0000");
         String jodaZoneId = DateTimeFormat.forPattern("YYYY-MM-dd'T'HH:mm:ss.SSSz").print(dateTime);
         assertThat(javaZoneId, equalTo("2019-01-01T01:01:01.001Z"));
-        assertThat(jodaZoneId, startsWith("2019-01-01T01:01:01.001"));
+        assertThat(jodaZoneId, equalTo("2019-01-01T01:01:01.001UTC"));
     }
 
     private void assertSameMillis(String input, String jodaFormat, String javaFormat) {
@@ -877,6 +876,13 @@ public class JavaJodaTimeDuellingTests extends OpenSearchTestCase {
         assertSamePrinterOutput(format, javaDate, jodaDate, dateFormatter, jodaDateFormatter);
     }
 
+    private void assertSamePrinterOutput(String format, ZonedDateTime javaDate, DateTime jodaDate, Locale locale) {
+        DateFormatter dateFormatter = DateFormatter.forPattern(format).withLocale(locale);
+        DateFormatter jodaDateFormatter = Joda.forPattern(format).withLocale(locale);
+
+        assertSamePrinterOutput(format, javaDate, jodaDate, dateFormatter, jodaDateFormatter);
+    }
+
     private void assertSamePrinterOutput(
         String format,
         ZonedDateTime javaDate,
@@ -901,6 +907,12 @@ public class JavaJodaTimeDuellingTests extends OpenSearchTestCase {
     private void assertSameDate(String input, String format) {
         DateFormatter jodaFormatter = Joda.forPattern(format);
         DateFormatter javaFormatter = DateFormatter.forPattern(format);
+        assertSameDate(input, format, jodaFormatter, javaFormatter);
+    }
+
+    private void assertSameDate(String input, String format, Locale locale) {
+        DateFormatter jodaFormatter = Joda.forPattern(format).withLocale(locale);
+        DateFormatter javaFormatter = DateFormatter.forPattern(format).withLocale(locale);
         assertSameDate(input, format, jodaFormatter, javaFormatter);
     }
 

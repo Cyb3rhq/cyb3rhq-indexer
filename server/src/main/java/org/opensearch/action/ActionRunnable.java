@@ -42,7 +42,7 @@ import org.opensearch.core.action.ActionListener;
  * Base class for {@link Runnable}s that need to call {@link ActionListener#onFailure(Exception)} in case an uncaught
  * exception or error is thrown while the actual action is run.
  *
- * @opensearch.api
+ * @opensearch.internal
  */
 public abstract class ActionRunnable<Response> extends AbstractRunnable {
 

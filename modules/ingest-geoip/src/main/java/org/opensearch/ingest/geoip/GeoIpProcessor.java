@@ -50,7 +50,7 @@ import org.opensearch.common.network.NetworkAddress;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
-import org.opensearch.ingest.geoip.IngestGeoIpModulePlugin.GeoIpCache;
+import org.opensearch.ingest.geoip.IngestGeoIpPlugin.GeoIpCache;
 
 import java.io.IOException;
 import java.net.InetAddress;

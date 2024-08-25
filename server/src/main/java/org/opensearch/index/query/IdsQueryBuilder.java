@@ -99,7 +99,7 @@ public class IdsQueryBuilder extends AbstractQueryBuilder<IdsQueryBuilder> {
             // types not supported so send an empty array to previous versions
             out.writeStringArray(Strings.EMPTY_ARRAY);
         }
-        out.writeStringArray(ids.toArray(new String[0]));
+        out.writeStringArray(ids.toArray(new String[ids.size()]));
     }
 
     /**

@@ -120,7 +120,13 @@ public class TransportIndicesStatsAction extends TransportBroadcastByNodeAction<
         List<DefaultShardOperationFailedException> shardFailures,
         ClusterState clusterState
     ) {
-        return new IndicesStatsResponse(responses.toArray(new ShardStats[0]), totalShards, successfulShards, failedShards, shardFailures);
+        return new IndicesStatsResponse(
+            responses.toArray(new ShardStats[responses.size()]),
+            totalShards,
+            successfulShards,
+            failedShards,
+            shardFailures
+        );
     }
 
     @Override

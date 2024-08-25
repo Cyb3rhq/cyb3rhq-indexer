@@ -32,6 +32,7 @@
 
 package org.opensearch.action.admin.cluster.snapshots.restore;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.action.ActionRequestValidationException;
 import org.opensearch.action.support.IndicesOptions;
@@ -150,9 +151,14 @@ public class RestoreSnapshotRequest extends ClusterManagerNodeRequest<RestoreSna
         includeGlobalState = in.readBoolean();
         partial = in.readBoolean();
         includeAliases = in.readBoolean();
+        if (in.getVersion().before(LegacyESVersion.V_7_7_0)) {
+            readSettingsFromStream(in); // formerly the unused settings field
+        }
         indexSettings = readSettingsFromStream(in);
         ignoreIndexSettings = in.readStringArray();
-        snapshotUuid = in.readOptionalString();
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            snapshotUuid = in.readOptionalString();
+        }
         if (in.getVersion().onOrAfter(Version.V_2_7_0)) {
             storageType = in.readEnum(StorageType.class);
         }
@@ -174,9 +180,18 @@ public class RestoreSnapshotRequest extends ClusterManagerNodeRequest<RestoreSna
         out.writeBoolean(includeGlobalState);
         out.writeBoolean(partial);
         out.writeBoolean(includeAliases);
+        if (out.getVersion().before(LegacyESVersion.V_7_7_0)) {
+            writeSettingsToStream(Settings.EMPTY, out); // formerly the unused settings field
+        }
         writeSettingsToStream(indexSettings, out);
         out.writeStringArray(ignoreIndexSettings);
-        out.writeOptionalString(snapshotUuid);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            out.writeOptionalString(snapshotUuid);
+        } else if (snapshotUuid != null) {
+            throw new IllegalStateException(
+                "restricting the snapshot UUID is forbidden in a cluster with version [" + out.getVersion() + "] nodes"
+            );
+        }
         if (out.getVersion().onOrAfter(Version.V_2_7_0)) {
             out.writeEnum(storageType);
         }
@@ -275,7 +290,7 @@ public class RestoreSnapshotRequest extends ClusterManagerNodeRequest<RestoreSna
      * @return this request
      */
     public RestoreSnapshotRequest indices(List<String> indices) {
-        this.indices = indices.toArray(new String[0]);
+        this.indices = indices.toArray(new String[indices.size()]);
         return this;
     }
 
@@ -405,7 +420,7 @@ public class RestoreSnapshotRequest extends ClusterManagerNodeRequest<RestoreSna
      * Sets the list of index settings and index settings groups that shouldn't be restored from snapshot
      */
     public RestoreSnapshotRequest ignoreIndexSettings(List<String> ignoreIndexSettings) {
-        this.ignoreIndexSettings = ignoreIndexSettings.toArray(new String[0]);
+        this.ignoreIndexSettings = ignoreIndexSettings.toArray(new String[ignoreIndexSettings.size()]);
         return this;
     }
 

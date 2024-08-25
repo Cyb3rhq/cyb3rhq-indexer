@@ -64,7 +64,7 @@ public class QueryStringWithAnalyzersIT extends ParameterizedStaticSettingsOpenS
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(CommonAnalysisModulePlugin.class);
+        return Arrays.asList(CommonAnalysisPlugin.class);
     }
 
     /**

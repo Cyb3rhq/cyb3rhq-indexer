@@ -32,13 +32,12 @@
 
 package org.opensearch.client;
 
-import org.apache.hc.client5.http.auth.AuthCache;
-import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient;
-import org.apache.hc.client5.http.impl.auth.BasicAuthCache;
-import org.apache.hc.client5.http.impl.auth.BasicScheme;
-import org.apache.hc.core5.http.Header;
-import org.apache.hc.core5.http.HttpHost;
-import org.apache.hc.core5.reactor.IOReactorStatus;
+import org.apache.http.Header;
+import org.apache.http.HttpHost;
+import org.apache.http.client.AuthCache;
+import org.apache.http.impl.auth.BasicScheme;
+import org.apache.http.impl.client.BasicAuthCache;
+import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
 import org.opensearch.client.RestClient.NodeTuple;
 
 import java.io.IOException;
@@ -56,15 +55,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
-import reactor.core.publisher.Mono;
-
 import static java.util.Collections.singletonList;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -414,21 +410,11 @@ public class RestClientTests extends RestClientTestCase {
         CloseableHttpAsyncClient client = mock(CloseableHttpAsyncClient.class);
         RestClient restClient = new RestClient(client, new Header[] {}, nodes, null, null, null, false, false);
 
-        when(client.getStatus()).thenReturn(IOReactorStatus.ACTIVE);
+        when(client.isRunning()).thenReturn(true);
         assertTrue(restClient.isRunning());
 
-        when(client.getStatus()).thenReturn(IOReactorStatus.INACTIVE);
+        when(client.isRunning()).thenReturn(false);
         assertFalse(restClient.isRunning());
-    }
-
-    public void testStreamWithUnsupportedMethod() throws Exception {
-        try (RestClient restClient = createRestClient()) {
-            final UnsupportedOperationException ex = assertThrows(
-                UnsupportedOperationException.class,
-                () -> restClient.streamRequest(new StreamingRequest<>("unsupported", randomAsciiLettersOfLength(5), Mono.empty()))
-            );
-            assertEquals("http method not supported: unsupported", ex.getMessage());
-        }
     }
 
     private static void assertNodes(NodeTuple<List<Node>> nodeTuple, AtomicInteger lastNodeIndex, int runs) throws IOException {

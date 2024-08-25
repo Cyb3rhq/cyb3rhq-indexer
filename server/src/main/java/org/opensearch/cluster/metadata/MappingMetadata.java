@@ -32,6 +32,7 @@
 
 package org.opensearch.cluster.metadata;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.cluster.AbstractDiffable;
 import org.opensearch.cluster.Diff;
@@ -162,6 +163,9 @@ public class MappingMetadata extends AbstractDiffable<MappingMetadata> {
         source().writeTo(out);
         // routing
         out.writeBoolean(routingRequired);
+        if (out.getVersion().before(LegacyESVersion.V_7_0_0)) {
+            out.writeBoolean(false); // hasParentField
+        }
     }
 
     @Override
@@ -188,6 +192,9 @@ public class MappingMetadata extends AbstractDiffable<MappingMetadata> {
         source = CompressedXContent.readCompressedString(in);
         // routing
         routingRequired = in.readBoolean();
+        if (in.getVersion().before(LegacyESVersion.V_7_0_0)) {
+            in.readBoolean(); // hasParentField
+        }
     }
 
     public static Diff<MappingMetadata> readDiffFrom(StreamInput in) throws IOException {

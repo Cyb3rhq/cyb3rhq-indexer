@@ -225,7 +225,7 @@ public class ReplicationResponse extends ActionResponse {
             }
             Failure[] failures = EMPTY;
             if (failuresList != null) {
-                failures = failuresList.toArray(new Failure[0]);
+                failures = failuresList.toArray(new Failure[failuresList.size()]);
             }
             return new ShardInfo(total, successful, failures);
         }

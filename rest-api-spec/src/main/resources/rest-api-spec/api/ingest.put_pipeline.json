@@ -1,7 +1,7 @@
 {
   "ingest.put_pipeline":{
     "documentation":{
-      "url":"https://opensearch.org/docs/latest/ingest-pipelines/create-ingest/",
+      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/put-pipeline-api.html",
       "description":"Creates or updates a pipeline."
     },
     "stability":"stable",

@@ -48,7 +48,6 @@ import reactor.util.annotation.NonNull;
  * @opensearch.internal
  */
 public abstract class AsyncShardFetchCache<K extends BaseNodeResponse> {
-
     private final Logger logger;
     private final String type;
 

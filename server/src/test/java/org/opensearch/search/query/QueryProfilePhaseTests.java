@@ -35,7 +35,6 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.PhraseQuery;
 import org.apache.lucene.search.Pruning;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
@@ -49,30 +48,20 @@ import org.apache.lucene.tests.index.RandomIndexWriter;
 import org.opensearch.action.search.SearchShardTask;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.index.Index;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.mapper.DocumentMapper;
-import org.opensearch.index.mapper.MatchOnlyTextFieldMapper;
 import org.opensearch.index.mapper.NumberFieldMapper.NumberFieldType;
 import org.opensearch.index.mapper.NumberFieldMapper.NumberType;
-import org.opensearch.index.mapper.SourceFieldMapper;
-import org.opensearch.index.mapper.TextSearchInfo;
 import org.opensearch.index.query.ParsedQuery;
 import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.SourceFieldMatchQuery;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.IndexShardTestCase;
-import org.opensearch.index.shard.SearchOperationListener;
 import org.opensearch.lucene.queries.MinDocQuery;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.collapse.CollapseBuilder;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.ScrollContext;
 import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.lookup.LeafSearchLookup;
-import org.opensearch.search.lookup.SearchLookup;
-import org.opensearch.search.lookup.SourceLookup;
 import org.opensearch.search.profile.ProfileResult;
 import org.opensearch.search.profile.ProfileShardResult;
 import org.opensearch.search.profile.SearchProfileShardResults;
@@ -91,7 +80,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -106,7 +94,6 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -1115,6 +1102,10 @@ public class QueryProfilePhaseTests extends IndexShardTestCase {
     }
 
     public void testDisableTopScoreCollection() throws Exception {
+        assumeFalse(
+            "Concurrent search case muted pending fix: https://github.com/opensearch-project/OpenSearch/issues/10469",
+            executor != null
+        );
         Directory dir = newDirectory();
         IndexWriterConfig iwc = newIndexWriterConfig(new StandardAnalyzer());
         RandomIndexWriter w = new RandomIndexWriter(random(), dir, iwc);
@@ -1286,6 +1277,10 @@ public class QueryProfilePhaseTests extends IndexShardTestCase {
     }
 
     public void testMaxScore() throws Exception {
+        assumeFalse(
+            "Concurrent search case muted pending fix: https://github.com/opensearch-project/OpenSearch/issues/9932",
+            executor != null
+        );
         Directory dir = newDirectory();
         final Sort sort = new Sort(new SortField("filter", SortField.Type.STRING));
         IndexWriterConfig iwc = newIndexWriterConfig().setIndexSort(sort);
@@ -1405,6 +1400,10 @@ public class QueryProfilePhaseTests extends IndexShardTestCase {
     }
 
     public void testCollapseQuerySearchResults() throws Exception {
+        assumeFalse(
+            "Concurrent search case muted pending fix: https://github.com/opensearch-project/OpenSearch/issues/10139",
+            executor != null
+        );
         Directory dir = newDirectory();
         final Sort sort = new Sort(new SortField("user", SortField.Type.INT));
         IndexWriterConfig iwc = newIndexWriterConfig().setIndexSort(sort);
@@ -1527,90 +1526,6 @@ public class QueryProfilePhaseTests extends IndexShardTestCase {
         dir.close();
     }
 
-    public void testSourceFieldMatchQueryWithProfile() throws Exception {
-        Directory dir = newDirectory();
-        IndexWriterConfig iwc = newIndexWriterConfig();
-        RandomIndexWriter w = new RandomIndexWriter(random(), dir, iwc);
-        w.close();
-        IndexReader reader = DirectoryReader.open(dir);
-        QueryShardContext queryShardContext = mock(QueryShardContext.class);
-        DocumentMapper mockDocumentMapper = mock(DocumentMapper.class);
-        SourceFieldMapper mockSourceMapper = mock(SourceFieldMapper.class);
-        SearchLookup searchLookup = mock(SearchLookup.class);
-        LeafSearchLookup leafSearchLookup = mock(LeafSearchLookup.class);
-
-        when(queryShardContext.sourcePath("foo")).thenReturn(Set.of("bar"));
-        when(queryShardContext.index()).thenReturn(new Index("test_index", "uuid"));
-        when(searchLookup.getLeafSearchLookup(any())).thenReturn(leafSearchLookup);
-        when(leafSearchLookup.source()).thenReturn(new SourceLookup());
-        when(mockSourceMapper.enabled()).thenReturn(true);
-        when(mockDocumentMapper.sourceMapper()).thenReturn(mockSourceMapper);
-        when(queryShardContext.documentMapper(any())).thenReturn(mockDocumentMapper);
-        when(queryShardContext.lookup()).thenReturn(searchLookup);
-
-        TestSearchContext context = new TestSearchContext(queryShardContext, indexShard, newContextSearcher(reader, executor));
-        context.parsedQuery(
-            new ParsedQuery(
-                new SourceFieldMatchQuery(
-                    new TermQuery(new Term("foo", "bar")),
-                    new PhraseQuery("foo", "bar", "baz"),
-                    new MatchOnlyTextFieldMapper.MatchOnlyTextFieldType(
-                        "user",
-                        true,
-                        true,
-                        TextSearchInfo.WHITESPACE_MATCH_ONLY,
-                        Collections.emptyMap()
-                    ),
-                    queryShardContext
-                )
-            )
-        );
-
-        context.setTask(new SearchShardTask(123L, "", "", "", null, Collections.emptyMap()));
-        context.setSize(1);
-        context.trackTotalHitsUpTo(5);
-        QueryPhase.executeInternal(context.withCleanQueryResult().withProfilers(), queryPhaseSearcher);
-        assertProfileData(context, "SourceFieldMatchQuery", query -> {
-            assertThat(query.getTimeBreakdown().keySet(), not(empty()));
-            assertThat(query.getTimeBreakdown().get("score"), equalTo(0L));
-            assertThat(query.getTimeBreakdown().get("score_count"), equalTo(0L));
-            if (executor != null) {
-                long maxScore = query.getTimeBreakdown().get("max_score");
-                long minScore = query.getTimeBreakdown().get("min_score");
-                long avgScore = query.getTimeBreakdown().get("avg_score");
-                long maxScoreCount = query.getTimeBreakdown().get("max_score_count");
-                long minScoreCount = query.getTimeBreakdown().get("min_score_count");
-                long avgScoreCount = query.getTimeBreakdown().get("avg_score_count");
-                assertThat(maxScore, equalTo(0L));
-                assertThat(minScore, equalTo(0L));
-                assertThat(avgScore, equalTo(0L));
-                assertThat(maxScore, equalTo(avgScore));
-                assertThat(avgScore, equalTo(minScore));
-                assertThat(maxScoreCount, equalTo(0L));
-                assertThat(minScoreCount, equalTo(0L));
-                assertThat(avgScoreCount, equalTo(0L));
-                assertThat(maxScoreCount, equalTo(avgScoreCount));
-                assertThat(avgScoreCount, equalTo(minScoreCount));
-            }
-            assertThat(query.getTimeBreakdown().get("create_weight"), greaterThan(0L));
-            assertThat(query.getTimeBreakdown().get("create_weight_count"), equalTo(1L));
-            assertThat(query.getProfiledChildren(), empty());
-        }, collector -> {
-            assertThat(collector.getReason(), equalTo("search_top_hits"));
-            assertThat(collector.getTime(), greaterThan(0L));
-            if (collector.getName().contains("CollectorManager")) {
-                assertThat(collector.getReduceTime(), greaterThan(0L));
-            }
-            assertThat(collector.getMaxSliceTime(), greaterThan(0L));
-            assertThat(collector.getMinSliceTime(), greaterThan(0L));
-            assertThat(collector.getAvgSliceTime(), greaterThan(0L));
-            assertThat(collector.getSliceCount(), greaterThanOrEqualTo(1));
-            assertThat(collector.getProfiledChildren(), empty());
-        });
-        reader.close();
-        dir.close();
-    }
-
     private void assertProfileData(SearchContext context, String type, Consumer<ProfileResult> query, Consumer<CollectorResult> collector)
         throws IOException {
         assertProfileData(context, collector, (profileResult) -> {
@@ -1677,9 +1592,6 @@ public class QueryProfilePhaseTests extends IndexShardTestCase {
         SearchContext searchContext = mock(SearchContext.class);
         IndexShard indexShard = mock(IndexShard.class);
         when(searchContext.indexShard()).thenReturn(indexShard);
-        SearchOperationListener searchOperationListener = new SearchOperationListener() {
-        };
-        when(indexShard.getSearchOperationListener()).thenReturn(searchOperationListener);
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         return new ContextIndexSearcher(
             reader,
@@ -1697,9 +1609,6 @@ public class QueryProfilePhaseTests extends IndexShardTestCase {
         SearchContext searchContext = mock(SearchContext.class);
         IndexShard indexShard = mock(IndexShard.class);
         when(searchContext.indexShard()).thenReturn(indexShard);
-        SearchOperationListener searchOperationListener = new SearchOperationListener() {
-        };
-        when(indexShard.getSearchOperationListener()).thenReturn(searchOperationListener);
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         return new ContextIndexSearcher(
             reader,

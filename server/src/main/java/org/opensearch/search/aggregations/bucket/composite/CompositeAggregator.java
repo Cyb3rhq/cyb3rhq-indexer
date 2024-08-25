@@ -73,8 +73,7 @@ import org.opensearch.search.aggregations.LeafBucketCollector;
 import org.opensearch.search.aggregations.MultiBucketCollector;
 import org.opensearch.search.aggregations.MultiBucketConsumerService;
 import org.opensearch.search.aggregations.bucket.BucketsAggregator;
-import org.opensearch.search.aggregations.bucket.filterrewrite.CompositeAggregatorBridge;
-import org.opensearch.search.aggregations.bucket.filterrewrite.FilterRewriteOptimizationContext;
+import org.opensearch.search.aggregations.bucket.FastFilterRewriteHelper;
 import org.opensearch.search.aggregations.bucket.missing.MissingOrder;
 import org.opensearch.search.aggregations.bucket.terms.LongKeyedBucketOrds;
 import org.opensearch.search.internal.SearchContext;
@@ -88,20 +87,17 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BiConsumer;
-import java.util.function.Function;
 import java.util.function.LongUnaryOperator;
 import java.util.stream.Collectors;
 
 import static org.opensearch.search.aggregations.MultiBucketConsumerService.MAX_BUCKET_SETTING;
-import static org.opensearch.search.aggregations.bucket.filterrewrite.DateHistogramAggregatorBridge.segmentMatchAll;
 
 /**
- * Main aggregator that aggregates docs from multiple aggregations
+ * Main aggregator that aggregates docs from mulitple aggregations
  *
  * @opensearch.internal
  */
-public final class CompositeAggregator extends BucketsAggregator {
+final class CompositeAggregator extends BucketsAggregator {
     private final int size;
     private final List<String> sourceNames;
     private final int[] reverseMuls;
@@ -120,8 +116,9 @@ public final class CompositeAggregator extends BucketsAggregator {
 
     private boolean earlyTerminated;
 
-    private final FilterRewriteOptimizationContext filterRewriteOptimizationContext;
-    private LongKeyedBucketOrds bucketOrds;
+    private final FastFilterRewriteHelper.FastFilterContext fastFilterContext;
+    private LongKeyedBucketOrds bucketOrds = null;
+    private Rounding.Prepared preparedRounding = null;
 
     CompositeAggregator(
         String name,
@@ -167,62 +164,56 @@ public final class CompositeAggregator extends BucketsAggregator {
         this.queue = new CompositeValuesCollectorQueue(context.bigArrays(), sources, size, rawAfterKey);
         this.rawAfterKey = rawAfterKey;
 
-        CompositeAggregatorBridge bridge = new CompositeAggregatorBridge() {
-            private RoundingValuesSource valuesSource;
-            private long afterKey = -1L;
+        fastFilterContext = new FastFilterRewriteHelper.FastFilterContext(context);
+        if (!FastFilterRewriteHelper.isCompositeAggRewriteable(sourceConfigs)) return;
+        fastFilterContext.setAggregationType(new CompositeAggregationType());
+        if (fastFilterContext.isRewriteable(parent, subAggregators.length)) {
+            // bucketOrds is used for saving date histogram results
+            bucketOrds = LongKeyedBucketOrds.build(context.bigArrays(), CardinalityUpperBound.ONE);
+            preparedRounding = ((CompositeAggregationType) fastFilterContext.getAggregationType()).getRoundingPrepared();
+            fastFilterContext.buildFastFilter();
+        }
+    }
 
-            @Override
-            protected boolean canOptimize() {
-                if (canOptimize(sourceConfigs)) {
-                    this.valuesSource = (RoundingValuesSource) sourceConfigs[0].valuesSource();
-                    if (rawAfterKey != null) {
-                        assert rawAfterKey.size() == 1 && formats.size() == 1;
-                        this.afterKey = formats.get(0).parseLong(rawAfterKey.get(0).toString(), false, () -> {
-                            throw new IllegalArgumentException("now() is not supported in [after] key");
-                        });
-                    }
+    /**
+     * Currently the filter rewrite is only supported for date histograms
+     */
+    private class CompositeAggregationType extends FastFilterRewriteHelper.AbstractDateHistogramAggregationType {
+        private final RoundingValuesSource valuesSource;
+        private long afterKey = -1L;
 
-                    // bucketOrds is used for saving the date histogram results got from the optimization path
-                    bucketOrds = LongKeyedBucketOrds.build(context.bigArrays(), CardinalityUpperBound.ONE);
-                    return true;
-                }
-                return false;
+        public CompositeAggregationType() {
+            super(sourceConfigs[0].fieldType(), sourceConfigs[0].missingBucket(), sourceConfigs[0].hasScript());
+            this.valuesSource = (RoundingValuesSource) sourceConfigs[0].valuesSource();
+            if (rawAfterKey != null) {
+                assert rawAfterKey.size() == 1 && formats.size() == 1;
+                this.afterKey = formats.get(0).parseLong(rawAfterKey.get(0).toString(), false, () -> {
+                    throw new IllegalArgumentException("now() is not supported in [after] key");
+                });
             }
+        }
 
-            @Override
-            protected void prepare() throws IOException {
-                buildRanges(context);
-            }
+        public Rounding getRounding(final long low, final long high) {
+            return valuesSource.getRounding();
+        }
 
-            protected Rounding getRounding(final long low, final long high) {
-                return valuesSource.getRounding();
-            }
+        public Rounding.Prepared getRoundingPrepared() {
+            return valuesSource.getPreparedRounding();
+        }
 
-            protected Rounding.Prepared getRoundingPrepared() {
-                return valuesSource.getPreparedRounding();
+        @Override
+        protected void processAfterKey(long[] bound, long interval) {
+            // afterKey is the last bucket key in previous response, and the bucket key
+            // is the minimum of all values in the bucket, so need to add the interval
+            if (afterKey != -1L) {
+                bound[0] = afterKey + interval;
             }
+        }
 
-            @Override
-            protected long[] processAfterKey(long[] bounds, long interval) {
-                // afterKey is the last bucket key in previous response, and the bucket key
-                // is the minimum of all values in the bucket, so need to add the interval
-                if (afterKey != -1L) {
-                    bounds[0] = afterKey + interval;
-                }
-                return bounds;
-            }
-
-            @Override
-            protected int getSize() {
-                return size;
-            }
-
-            @Override
-            protected Function<Long, Long> bucketOrdProducer() {
-                return (key) -> bucketOrds.add(0, getRoundingPrepared().round((long) key));
-            }
-        };
-        filterRewriteOptimizationContext = new FilterRewriteOptimizationContext(bridge, parent, subAggregators.length, context);
+        @Override
+        public int getSize() {
+            return size;
+        }
     }
 
     @Override
@@ -374,7 +365,7 @@ public final class CompositeAggregator extends BucketsAggregator {
                 return v2 != null && DocValues.unwrapSingleton(v2) == null;
 
             default:
-                // we have no clue whether the field is multivalued or not so we assume it is.
+                // we have no clue whether the field is multi-valued or not so we assume it is.
                 return true;
         }
     }
@@ -557,7 +548,14 @@ public final class CompositeAggregator extends BucketsAggregator {
 
     @Override
     protected LeafBucketCollector getLeafCollector(LeafReaderContext ctx, LeafBucketCollector sub) throws IOException {
-        boolean optimized = filterRewriteOptimizationContext.tryOptimize(ctx, this::incrementBucketDocCount, segmentMatchAll(context, ctx));
+        boolean optimized = FastFilterRewriteHelper.tryFastFilterAggregation(
+            ctx,
+            fastFilterContext,
+            (key, count) -> incrementBucketDocCount(
+                FastFilterRewriteHelper.getBucketOrd(bucketOrds.add(0, preparedRounding.round(key))),
+                count
+            )
+        );
         if (optimized) throw new CollectionTerminatedException();
 
         finishLeaf();
@@ -707,10 +705,5 @@ public final class CompositeAggregator extends BucketsAggregator {
             this.context = context;
             this.docIdSet = docIdSet;
         }
-    }
-
-    @Override
-    public void collectDebugInfo(BiConsumer<String, Object> add) {
-        filterRewriteOptimizationContext.populateDebugInfo(add);
     }
 }

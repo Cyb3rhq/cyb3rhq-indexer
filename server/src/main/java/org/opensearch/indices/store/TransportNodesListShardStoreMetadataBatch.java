@@ -12,6 +12,7 @@ import org.opensearch.OpenSearchException;
 import org.opensearch.action.ActionType;
 import org.opensearch.action.FailedNodeException;
 import org.opensearch.action.support.ActionFilters;
+import org.opensearch.action.support.nodes.BaseNodeRequest;
 import org.opensearch.action.support.nodes.BaseNodeResponse;
 import org.opensearch.action.support.nodes.BaseNodesRequest;
 import org.opensearch.action.support.nodes.BaseNodesResponse;
@@ -31,7 +32,6 @@ import org.opensearch.index.store.Store;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata;
 import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportRequest;
 import org.opensearch.transport.TransportService;
 
 import java.io.IOException;
@@ -155,7 +155,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
                 shardStoreMetadataMap.put(shardId, new NodeStoreFilesMetadata(storeFilesMetadata, null));
             } catch (Exception e) {
                 // should return null in case of known exceptions being returned from listShardMetadataInternal method.
-                if (e.getMessage().contains(INDEX_NOT_FOUND) || e instanceof IOException) {
+                if (e.getMessage().contains(INDEX_NOT_FOUND)) {
                     shardStoreMetadataMap.put(shardId, null);
                 } else {
                     // return actual exception as it is for unknown exceptions
@@ -276,11 +276,6 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
             }
         }
 
-        public static boolean isEmpty(NodeStoreFilesMetadata response) {
-            return response.storeFilesMetadata() == null
-                || response.storeFilesMetadata().isEmpty() && response.getStoreFileFetchException() == null;
-        }
-
         public Exception getStoreFileFetchException() {
             return storeFileFetchException;
         }
@@ -296,7 +291,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
      * This is used in {@link TransportNodesAction}
      * @opensearch.internal
      */
-    public static class NodeRequest extends TransportRequest {
+    public static class NodeRequest extends BaseNodeRequest {
 
         private final Map<ShardId, ShardAttributes> shardAttributes;
 
@@ -329,13 +324,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
 
         protected NodeStoreFilesMetadataBatch(StreamInput in) throws IOException {
             super(in);
-            this.nodeStoreFilesMetadataBatch = in.readMap(ShardId::new, i -> {
-                if (i.readBoolean()) {
-                    return new NodeStoreFilesMetadata(i);
-                } else {
-                    return null;
-                }
-            });
+            this.nodeStoreFilesMetadataBatch = in.readMap(ShardId::new, NodeStoreFilesMetadata::new);
         }
 
         public NodeStoreFilesMetadataBatch(DiscoveryNode node, Map<ShardId, NodeStoreFilesMetadata> nodeStoreFilesMetadataBatch) {
@@ -350,14 +339,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
-            out.writeMap(nodeStoreFilesMetadataBatch, (o, k) -> k.writeTo(o), (o, v) -> {
-                if (v != null) {
-                    o.writeBoolean(true);
-                    v.writeTo(o);
-                } else {
-                    o.writeBoolean(false);
-                }
-            });
+            out.writeMap(nodeStoreFilesMetadataBatch, (o, k) -> k.writeTo(o), (o, v) -> v.writeTo(o));
         }
     }
 

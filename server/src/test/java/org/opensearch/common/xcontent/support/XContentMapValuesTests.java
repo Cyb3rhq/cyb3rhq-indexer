@@ -74,13 +74,13 @@ public class XContentMapValuesTests extends AbstractFilteringTestCase {
         if (includes == null) {
             sourceIncludes = randomBoolean() ? Strings.EMPTY_ARRAY : null;
         } else {
-            sourceIncludes = includes.toArray(new String[0]);
+            sourceIncludes = includes.toArray(new String[includes.size()]);
         }
         String[] sourceExcludes;
         if (excludes == null) {
             sourceExcludes = randomBoolean() ? Strings.EMPTY_ARRAY : null;
         } else {
-            sourceExcludes = excludes.toArray(new String[0]);
+            sourceExcludes = excludes.toArray(new String[excludes.size()]);
         }
 
         assertEquals(

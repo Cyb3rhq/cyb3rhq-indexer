@@ -9,7 +9,6 @@
 package org.opensearch.rest;
 
 import org.opensearch.OpenSearchException;
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.transport.TransportService;
 
 import java.util.HashSet;
@@ -21,9 +20,8 @@ import static java.util.Objects.requireNonNull;
 /**
  * A named Route
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "2.7.0")
 public class NamedRoute extends RestHandler.Route {
 
     private static final String VALID_ACTION_NAME_PATTERN = "^[a-zA-Z0-9:/*_]*$";

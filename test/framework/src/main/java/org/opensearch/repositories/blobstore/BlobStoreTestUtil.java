@@ -90,6 +90,7 @@ import java.util.stream.Collectors;
 
 import static org.opensearch.test.OpenSearchTestCase.buildNewFakeTransportAddress;
 import static org.opensearch.test.OpenSearchTestCase.randomIntBetween;
+import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasKey;
@@ -138,11 +139,11 @@ public final class BlobStoreTestUtil {
                     XContentParser parser = MediaTypeRegistry.JSON.xContent()
                         .createParser(NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE, blob)
                 ) {
-                    repositoryData = RepositoryData.snapshotsFromXContent(parser, latestGen);
+                    repositoryData = RepositoryData.snapshotsFromXContent(parser, latestGen, false);
                 }
                 assertIndexUUIDs(repository, repositoryData);
                 assertSnapshotUUIDs(repository, repositoryData);
-                assertShardIndexGenerations(blobContainer, repositoryData);
+                assertShardIndexGenerations(repository, blobContainer, repositoryData);
                 return null;
             } catch (AssertionError e) {
                 return e;
@@ -166,7 +167,8 @@ public final class BlobStoreTestUtil {
         assertTrue(indexGenerations.length <= 2);
     }
 
-    private static void assertShardIndexGenerations(BlobContainer repoRoot, RepositoryData repositoryData) throws IOException {
+    private static void assertShardIndexGenerations(BlobStoreRepository repository, BlobContainer repoRoot, RepositoryData repositoryData)
+        throws IOException {
         final ShardGenerations shardGenerations = repositoryData.shardGenerations();
         final BlobContainer indicesContainer = repoRoot.children().get("indices");
         for (IndexId index : shardGenerations.indices()) {
@@ -174,16 +176,22 @@ public final class BlobStoreTestUtil {
             if (gens.isEmpty() == false) {
                 final BlobContainer indexContainer = indicesContainer.children().get(index.getId());
                 final Map<String, BlobContainer> shardContainers = indexContainer.children();
-                for (int i = 0; i < gens.size(); i++) {
-                    final String generation = gens.get(i);
-                    assertThat(generation, not(ShardGenerations.DELETED_SHARD_GEN));
-                    if (generation != null && generation.equals(ShardGenerations.NEW_SHARD_GEN) == false) {
-                        final String shardId = Integer.toString(i);
-                        assertThat(shardContainers, hasKey(shardId));
-                        assertThat(
-                            shardContainers.get(shardId).listBlobsByPrefix(BlobStoreRepository.INDEX_FILE_PREFIX),
-                            hasKey(BlobStoreRepository.INDEX_FILE_PREFIX + generation)
-                        );
+                if (isRemoteSnapshot(repository, repositoryData, index)) {
+                    // If the source of the data is another snapshot (i.e. searchable snapshot)
+                    // then assert that there is no shard data (because it exists in the source snapshot)
+                    assertThat(shardContainers, anEmptyMap());
+                } else {
+                    for (int i = 0; i < gens.size(); i++) {
+                        final String generation = gens.get(i);
+                        assertThat(generation, not(ShardGenerations.DELETED_SHARD_GEN));
+                        if (generation != null && generation.equals(ShardGenerations.NEW_SHARD_GEN) == false) {
+                            final String shardId = Integer.toString(i);
+                            assertThat(shardContainers, hasKey(shardId));
+                            assertThat(
+                                shardContainers.get(shardId).listBlobsByPrefix(BlobStoreRepository.INDEX_FILE_PREFIX),
+                                hasKey(BlobStoreRepository.INDEX_FILE_PREFIX + generation)
+                            );
+                        }
                     }
                 }
             }

@@ -12,7 +12,6 @@ import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.common.util.concurrent.ThreadContext.StoredContext;
-import org.opensearch.common.util.concurrent.ThreadContextAccess;
 import org.opensearch.telemetry.Telemetry;
 import org.opensearch.telemetry.TelemetrySettings;
 import org.opensearch.telemetry.metrics.MetricsTelemetry;
@@ -261,7 +260,7 @@ public class ThreadContextBasedTracerContextStorageTests extends OpenSearchTestC
             try (StoredContext ignored = threadContext.stashContext()) {
                 assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(not(nullValue())));
                 assertThat(threadContextStorage.get(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(span));
-                ThreadContextAccess.doPrivilegedVoid(threadContext::markAsSystemContext);
+                threadContext.markAsSystemContext();
                 assertThat(threadContext.getTransient(ThreadContextBasedTracerContextStorage.CURRENT_SPAN), is(nullValue()));
             }
         }

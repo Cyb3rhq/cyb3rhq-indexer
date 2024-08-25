@@ -54,8 +54,4 @@ public class TestResponse extends TransportResponse {
     public void writeTo(StreamOutput out) throws IOException {
         out.writeString(value);
     }
-
-    public String getValue() {
-        return value;
-    }
 }

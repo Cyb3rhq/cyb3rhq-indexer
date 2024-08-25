@@ -419,7 +419,7 @@ public class GeoDistanceSortBuilderTests extends AbstractSortTestCase<GeoDistanc
             expectedWarnings.add(nestedPathDeprecationWarning);
         }
         if (expectedWarnings.isEmpty() == false) {
-            assertWarnings(expectedWarnings.toArray(new String[0]));
+            assertWarnings(expectedWarnings.toArray(new String[expectedWarnings.size()]));
             assertedWarnings.addAll(expectedWarnings);
         }
     }

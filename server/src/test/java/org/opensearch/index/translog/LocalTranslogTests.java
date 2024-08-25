@@ -291,7 +291,7 @@ public class LocalTranslogTests extends OpenSearchTestCase {
         );
 
         final IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(shardId.getIndex(), settings);
-        return new TranslogConfig(shardId, path, indexSettings, NON_RECYCLING_INSTANCE, bufferSize, "", false);
+        return new TranslogConfig(shardId, path, indexSettings, NON_RECYCLING_INSTANCE, bufferSize, "");
     }
 
     private Location addToTranslogAndList(Translog translog, List<Translog.Operation> list, Translog.Operation op) throws IOException {
@@ -1003,6 +1003,10 @@ public class LocalTranslogTests extends OpenSearchTestCase {
         return new Term("_id", Uid.encodeId(doc.id()));
     }
 
+    private Term newUid(String id) {
+        return new Term("_id", Uid.encodeId(id));
+    }
+
     public void testVerifyTranslogIsNotDeleted() throws IOException {
         assertFileIsPresent(translog, 1);
         translog.add(new Translog.Index("1", 0, primaryTerm.get(), new byte[] { 1 }));
@@ -1453,8 +1457,7 @@ public class LocalTranslogTests extends OpenSearchTestCase {
             temp.getIndexSettings(),
             temp.getBigArrays(),
             new ByteSizeValue(1, ByteSizeUnit.KB),
-            "",
-            false
+            ""
         );
 
         final Set<Long> persistedSeqNos = new HashSet<>();
@@ -1553,8 +1556,7 @@ public class LocalTranslogTests extends OpenSearchTestCase {
             temp.getIndexSettings(),
             temp.getBigArrays(),
             new ByteSizeValue(1, ByteSizeUnit.KB),
-            "",
-            false
+            ""
         );
 
         final Set<Long> persistedSeqNos = new HashSet<>();

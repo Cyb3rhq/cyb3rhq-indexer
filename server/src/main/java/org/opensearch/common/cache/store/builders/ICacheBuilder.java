@@ -10,7 +10,6 @@ package org.opensearch.common.cache.store.builders;
 
 import org.opensearch.common.annotation.ExperimentalApi;
 import org.opensearch.common.cache.ICache;
-import org.opensearch.common.cache.ICacheKey;
 import org.opensearch.common.cache.RemovalListener;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
@@ -29,15 +28,13 @@ public abstract class ICacheBuilder<K, V> {
 
     private long maxWeightInBytes;
 
-    private ToLongBiFunction<ICacheKey<K>, V> weigher;
+    private ToLongBiFunction<K, V> weigher;
 
     private TimeValue expireAfterAcess;
 
     private Settings settings;
 
-    private RemovalListener<ICacheKey<K>, V> removalListener;
-
-    private boolean statsTrackingEnabled = true;
+    private RemovalListener<K, V> removalListener;
 
     public ICacheBuilder() {}
 
@@ -46,7 +43,7 @@ public abstract class ICacheBuilder<K, V> {
         return this;
     }
 
-    public ICacheBuilder<K, V> setWeigher(ToLongBiFunction<ICacheKey<K>, V> weigher) {
+    public ICacheBuilder<K, V> setWeigher(ToLongBiFunction<K, V> weigher) {
         this.weigher = weigher;
         return this;
     }
@@ -61,13 +58,8 @@ public abstract class ICacheBuilder<K, V> {
         return this;
     }
 
-    public ICacheBuilder<K, V> setRemovalListener(RemovalListener<ICacheKey<K>, V> removalListener) {
+    public ICacheBuilder<K, V> setRemovalListener(RemovalListener<K, V> removalListener) {
         this.removalListener = removalListener;
-        return this;
-    }
-
-    public ICacheBuilder<K, V> setStatsTrackingEnabled(boolean statsTrackingEnabled) {
-        this.statsTrackingEnabled = statsTrackingEnabled;
         return this;
     }
 
@@ -79,20 +71,16 @@ public abstract class ICacheBuilder<K, V> {
         return expireAfterAcess;
     }
 
-    public ToLongBiFunction<ICacheKey<K>, V> getWeigher() {
+    public ToLongBiFunction<K, V> getWeigher() {
         return weigher;
     }
 
-    public RemovalListener<ICacheKey<K>, V> getRemovalListener() {
+    public RemovalListener<K, V> getRemovalListener() {
         return this.removalListener;
     }
 
     public Settings getSettings() {
         return settings;
-    }
-
-    public boolean getStatsTrackingEnabled() {
-        return statsTrackingEnabled;
     }
 
     public abstract ICache<K, V> build();

@@ -1,7 +1,7 @@
 {
   "ingest.get_pipeline":{
     "documentation":{
-      "url":"https://opensearch.org/docs/latest/ingest-pipelines/get-ingest/",
+      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/get-pipeline-api.html",
       "description":"Returns a pipeline."
     },
     "stability":"stable",

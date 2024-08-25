@@ -111,7 +111,7 @@ public class ListPluginsCommandTests extends OpenSearchTestCase {
         final boolean hasNativeController
     ) throws IOException {
         PluginTestUtil.writePluginProperties(
-            env.pluginsDir().resolve(name),
+            env.pluginsFile().resolve(name),
             "description",
             description,
             "name",
@@ -132,9 +132,9 @@ public class ListPluginsCommandTests extends OpenSearchTestCase {
     }
 
     public void testPluginsDirMissing() throws Exception {
-        Files.delete(env.pluginsDir());
+        Files.delete(env.pluginsFile());
         IOException e = expectThrows(IOException.class, () -> listPlugins(home));
-        assertEquals("Plugins directory missing: " + env.pluginsDir(), e.getMessage());
+        assertEquals("Plugins directory missing: " + env.pluginsFile(), e.getMessage());
     }
 
     public void testNoPlugins() throws Exception {
@@ -161,7 +161,7 @@ public class ListPluginsCommandTests extends OpenSearchTestCase {
         MockTerminal terminal = listPlugins(home, params);
         assertEquals(
             buildMultiline(
-                "Plugins directory: " + env.pluginsDir(),
+                "Plugins directory: " + env.pluginsFile(),
                 "fake_plugin",
                 "- Plugin information:",
                 "Name: fake_plugin",
@@ -184,7 +184,7 @@ public class ListPluginsCommandTests extends OpenSearchTestCase {
         MockTerminal terminal = listPlugins(home, params);
         assertEquals(
             buildMultiline(
-                "Plugins directory: " + env.pluginsDir(),
+                "Plugins directory: " + env.pluginsFile(),
                 "fake_plugin1",
                 "- Plugin information:",
                 "Name: fake_plugin1",
@@ -208,7 +208,7 @@ public class ListPluginsCommandTests extends OpenSearchTestCase {
         MockTerminal terminal = listPlugins(home, params);
         assertEquals(
             buildMultiline(
-                "Plugins directory: " + env.pluginsDir(),
+                "Plugins directory: " + env.pluginsFile(),
                 "fake_plugin1",
                 "- Plugin information:",
                 "Name: fake_plugin1",
@@ -245,14 +245,14 @@ public class ListPluginsCommandTests extends OpenSearchTestCase {
     }
 
     public void testPluginWithoutDescriptorFile() throws Exception {
-        final Path pluginDir = env.pluginsDir().resolve("fake1");
+        final Path pluginDir = env.pluginsFile().resolve("fake1");
         Files.createDirectories(pluginDir);
         NoSuchFileException e = expectThrows(NoSuchFileException.class, () -> listPlugins(home));
         assertEquals(pluginDir.resolve(PluginInfo.OPENSEARCH_PLUGIN_PROPERTIES).toString(), e.getFile());
     }
 
     public void testPluginWithWrongDescriptorFile() throws Exception {
-        final Path pluginDir = env.pluginsDir().resolve("fake1");
+        final Path pluginDir = env.pluginsFile().resolve("fake1");
         PluginTestUtil.writePluginProperties(pluginDir, "description", "fake desc");
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> listPlugins(home));
         final Path descriptorPath = pluginDir.resolve(PluginInfo.OPENSEARCH_PLUGIN_PROPERTIES);
@@ -261,7 +261,7 @@ public class ListPluginsCommandTests extends OpenSearchTestCase {
 
     public void testExistingIncompatiblePlugin() throws Exception {
         PluginTestUtil.writePluginProperties(
-            env.pluginsDir().resolve("fake_plugin1"),
+            env.pluginsFile().resolve("fake_plugin1"),
             "description",
             "fake desc 1",
             "name",
@@ -289,7 +289,7 @@ public class ListPluginsCommandTests extends OpenSearchTestCase {
 
     public void testPluginWithDependencies() throws Exception {
         PluginTestUtil.writePluginProperties(
-            env.pluginsDir().resolve("fake_plugin1"),
+            env.pluginsFile().resolve("fake_plugin1"),
             "description",
             "fake desc 1",
             "name",
@@ -307,7 +307,7 @@ public class ListPluginsCommandTests extends OpenSearchTestCase {
         MockTerminal terminal = listPlugins(home, params);
         assertEquals(
             buildMultiline(
-                "Plugins directory: " + env.pluginsDir(),
+                "Plugins directory: " + env.pluginsFile(),
                 "fake_plugin1",
                 "- Plugin information:",
                 "Name: fake_plugin1",

@@ -24,14 +24,16 @@ public interface XContentContraints {
     final String DEFAULT_MAX_NAME_LEN_PROPERTY = "opensearch.xcontent.name.length.max";
     final String DEFAULT_MAX_DEPTH_PROPERTY = "opensearch.xcontent.depth.max";
 
-    final int DEFAULT_MAX_STRING_LEN = Integer.parseInt(System.getProperty(DEFAULT_MAX_STRING_LEN_PROPERTY, "50000000" /* ~50 Mb */));
+    final int DEFAULT_MAX_STRING_LEN = Integer.parseInt(
+        System.getProperty(DEFAULT_MAX_STRING_LEN_PROPERTY, Integer.toString(Integer.MAX_VALUE) /* no limit */ )
+    );
 
     final int DEFAULT_MAX_NAME_LEN = Integer.parseInt(
-        System.getProperty(DEFAULT_MAX_NAME_LEN_PROPERTY, "50000" /* StreamReadConstraints.DEFAULT_MAX_NAME_LEN */)
+        System.getProperty(DEFAULT_MAX_NAME_LEN_PROPERTY, Integer.toString(Integer.MAX_VALUE) /* no limit */ )
     );
 
     final int DEFAULT_MAX_DEPTH = Integer.parseInt(
-        System.getProperty(DEFAULT_MAX_DEPTH_PROPERTY, "1000" /* StreamReadConstraints.DEFAULT_MAX_DEPTH */)
+        System.getProperty(DEFAULT_MAX_DEPTH_PROPERTY, Integer.toString(Integer.MAX_VALUE) /* no limit */ )
     );
 
     final int DEFAULT_CODEPOINT_LIMIT = Integer.parseInt(System.getProperty(DEFAULT_CODEPOINT_LIMIT_PROPERTY, "52428800" /* ~50 Mb */));

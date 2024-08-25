@@ -84,8 +84,6 @@ import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchTransportService;
 import org.opensearch.action.search.SearchType;
-import org.opensearch.action.support.clustermanager.term.GetTermVersionAction;
-import org.opensearch.action.support.clustermanager.term.GetTermVersionRequest;
 import org.opensearch.action.support.replication.TransportReplicationActionTests;
 import org.opensearch.action.termvectors.MultiTermVectorsAction;
 import org.opensearch.action.termvectors.MultiTermVectorsRequest;
@@ -197,7 +195,6 @@ public class IndicesRequestIT extends OpenSearchIntegTestCase {
     }
 
     public void testGetFieldMappings() {
-
         String getFieldMappingsShardAction = GetFieldMappingsAction.NAME + "[index][s]";
         interceptTransportActions(getFieldMappingsShardAction);
 
@@ -548,14 +545,13 @@ public class IndicesRequestIT extends OpenSearchIntegTestCase {
     }
 
     public void testGetMappings() {
-        interceptTransportActions(GetTermVersionAction.NAME, GetMappingsAction.NAME);
+        interceptTransportActions(GetMappingsAction.NAME);
+
         GetMappingsRequest getMappingsRequest = new GetMappingsRequest().indices(randomIndicesOrAliases());
         internalCluster().coordOnlyNodeClient().admin().indices().getMappings(getMappingsRequest).actionGet();
 
         clearInterceptedActions();
-
-        assertActionInvocation(GetTermVersionAction.NAME, GetTermVersionRequest.class);
-        assertNoActionInvocation(GetMappingsAction.NAME);
+        assertSameIndices(getMappingsRequest, GetMappingsAction.NAME);
     }
 
     public void testPutMapping() {
@@ -569,8 +565,8 @@ public class IndicesRequestIT extends OpenSearchIntegTestCase {
     }
 
     public void testGetSettings() {
-
         interceptTransportActions(GetSettingsAction.NAME);
+
         GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(randomIndicesOrAliases());
         internalCluster().coordOnlyNodeClient().admin().indices().getSettings(getSettingsRequest).actionGet();
 
@@ -666,21 +662,6 @@ public class IndicesRequestIT extends OpenSearchIntegTestCase {
         }
     }
 
-    private static void assertActionInvocation(String action, Class<? extends TransportRequest> requestClass) {
-        List<TransportRequest> requests = consumeTransportRequests(action);
-        assertFalse(requests.isEmpty());
-        for (TransportRequest internalRequest : requests) {
-            assertTrue(internalRequest.getClass() == requestClass);
-        }
-    }
-
-    private static void assertNoActionInvocation(String... actions) {
-        for (String action : actions) {
-            List<TransportRequest> requests = consumeTransportRequests(action);
-            assertTrue(requests.isEmpty());
-        }
-    }
-
     private static void assertIndicesSubset(List<String> indices, String... actions) {
         // indices returned by each bulk shard request need to be a subset of the original indices
         for (String action : actions) {
@@ -739,7 +720,7 @@ public class IndicesRequestIT extends OpenSearchIntegTestCase {
         while (uniqueIndices.size() < count) {
             uniqueIndices.add(randomFrom(this.indices));
         }
-        return uniqueIndices.toArray(new String[0]);
+        return uniqueIndices.toArray(new String[uniqueIndices.size()]);
     }
 
     private static void assertAllRequestsHaveBeenConsumed() {
@@ -800,6 +781,7 @@ public class IndicesRequestIT extends OpenSearchIntegTestCase {
         }
 
         private final Set<String> actions = new HashSet<>();
+
         private final Map<String, List<TransportRequest>> requests = new HashMap<>();
 
         @Override
@@ -849,7 +831,6 @@ public class IndicesRequestIT extends OpenSearchIntegTestCase {
                     }
                 }
                 requestHandler.messageReceived(request, channel, task);
-
             }
         }
     }

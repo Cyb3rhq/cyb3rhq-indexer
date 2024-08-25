@@ -71,8 +71,7 @@ public class TransportIndicesExistsAction extends TransportClusterManagerNodeRea
             threadPool,
             actionFilters,
             IndicesExistsRequest::new,
-            indexNameExpressionResolver,
-            true
+            indexNameExpressionResolver
         );
     }
 

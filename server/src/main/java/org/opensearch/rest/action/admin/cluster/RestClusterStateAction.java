@@ -112,7 +112,7 @@ public class RestClusterStateAction extends BaseRestHandler {
         clusterStateRequest.clusterManagerNodeTimeout(
             request.paramAsTime("cluster_manager_timeout", clusterStateRequest.clusterManagerNodeTimeout())
         );
-        parseDeprecatedMasterTimeoutParameter(clusterStateRequest, request, deprecationLogger, getName());
+        parseDeprecatedMasterTimeoutParameter(clusterStateRequest, request);
         if (request.hasParam("wait_for_metadata_version")) {
             clusterStateRequest.waitForMetadataVersion(request.paramAsLong("wait_for_metadata_version", 0));
         }

@@ -32,6 +32,7 @@
 
 package org.opensearch.search.profile;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.unit.TimeValue;
@@ -134,7 +135,11 @@ public final class ProfileResult implements Writeable, ToXContentObject {
         this.description = in.readString();
         this.nodeTime = in.readLong();
         breakdown = in.readMap(StreamInput::readString, StreamInput::readLong);
-        debug = in.readMap(StreamInput::readString, StreamInput::readGenericValue);
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_9_0)) {
+            debug = in.readMap(StreamInput::readString, StreamInput::readGenericValue);
+        } else {
+            debug = Map.of();
+        }
         children = in.readList(ProfileResult::new);
         if (in.getVersion().onOrAfter(Version.V_2_10_0)) {
             this.maxSliceNodeTime = in.readOptionalLong();
@@ -153,7 +158,9 @@ public final class ProfileResult implements Writeable, ToXContentObject {
         out.writeString(description);
         out.writeLong(nodeTime);            // not Vlong because can be negative
         out.writeMap(breakdown, StreamOutput::writeString, StreamOutput::writeLong);
-        out.writeMap(debug, StreamOutput::writeString, StreamOutput::writeGenericValue);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_9_0)) {
+            out.writeMap(debug, StreamOutput::writeString, StreamOutput::writeGenericValue);
+        }
         out.writeList(children);
         if (out.getVersion().onOrAfter(Version.V_2_10_0)) {
             out.writeOptionalLong(maxSliceNodeTime);

@@ -68,6 +68,7 @@ import org.opensearch.index.query.QueryShardContext;
 import org.joda.time.DateTimeZone;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Collections;
 
@@ -216,14 +217,14 @@ public class DateFieldTypeTests extends FieldTypeTestCase {
             "field",
             false,
             false,
-            false,
+            true,
             DateFieldMapper.getDefaultDateTimeFormatter(),
             Resolution.MILLISECONDS,
             null,
             Collections.emptyMap()
         );
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> unsearchable.termQuery(date, context));
-        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
+        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
     }
 
     public void testRangeQuery() throws IOException {
@@ -279,7 +280,7 @@ public class DateFieldTypeTests extends FieldTypeTestCase {
             "field",
             false,
             false,
-            false,
+            true,
             DateFieldMapper.getDefaultDateTimeFormatter(),
             Resolution.MILLISECONDS,
             null,
@@ -289,7 +290,7 @@ public class DateFieldTypeTests extends FieldTypeTestCase {
             IllegalArgumentException.class,
             () -> unsearchable.rangeQuery(date1, date2, true, true, null, null, null, context)
         );
-        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
+        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
     }
 
     public void testRangeQueryWithIndexSort() {
@@ -366,6 +367,10 @@ public class DateFieldTypeTests extends FieldTypeTestCase {
         reader.close();
         w.close();
         dir.close();
+    }
+
+    private Instant instant(String str) {
+        return DateFormatters.from(DateFieldMapper.DEFAULT_DATE_TIME_FORMATTER.parse(str)).toInstant();
     }
 
     private static DateFieldType fieldType(Resolution resolution, String format, String nullValue) {

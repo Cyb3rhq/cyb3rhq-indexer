@@ -102,7 +102,7 @@ import static org.hamcrest.Matchers.arrayContaining;
  */
 public class RefreshListenersTests extends OpenSearchTestCase {
     private RefreshListeners listeners;
-    private Engine engine;
+    private InternalEngine engine;
     private volatile int maxListeners;
     private ThreadPool threadPool;
     private Store store;
@@ -134,8 +134,7 @@ public class RefreshListenersTests extends OpenSearchTestCase {
             createTempDir("translog"),
             indexSettings,
             BigArrays.NON_RECYCLING_INSTANCE,
-            "",
-            false
+            ""
         );
         Engine.EventListener eventListener = new Engine.EventListener() {
             @Override

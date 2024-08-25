@@ -73,8 +73,7 @@ public class TransportGetStoredScriptAction extends TransportClusterManagerNodeR
             threadPool,
             actionFilters,
             GetStoredScriptRequest::new,
-            indexNameExpressionResolver,
-            true
+            indexNameExpressionResolver
         );
         this.scriptService = scriptService;
     }

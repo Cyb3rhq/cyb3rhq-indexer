@@ -9,7 +9,6 @@
 package org.opensearch.index.translog;
 
 import org.opensearch.index.remote.RemoteTranslogTransferTracker;
-import org.opensearch.indices.RemoteStoreSettings;
 import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.repositories.Repository;
 import org.opensearch.repositories.RepositoryMissingException;
@@ -35,14 +34,11 @@ public class RemoteBlobStoreInternalTranslogFactory implements TranslogFactory {
 
     private final RemoteTranslogTransferTracker remoteTranslogTransferTracker;
 
-    private final RemoteStoreSettings remoteStoreSettings;
-
     public RemoteBlobStoreInternalTranslogFactory(
         Supplier<RepositoriesService> repositoriesServiceSupplier,
         ThreadPool threadPool,
         String repositoryName,
-        RemoteTranslogTransferTracker remoteTranslogTransferTracker,
-        RemoteStoreSettings remoteStoreSettings
+        RemoteTranslogTransferTracker remoteTranslogTransferTracker
     ) {
         Repository repository;
         try {
@@ -53,7 +49,6 @@ public class RemoteBlobStoreInternalTranslogFactory implements TranslogFactory {
         this.repository = repository;
         this.threadPool = threadPool;
         this.remoteTranslogTransferTracker = remoteTranslogTransferTracker;
-        this.remoteStoreSettings = remoteStoreSettings;
     }
 
     @Override
@@ -79,8 +74,7 @@ public class RemoteBlobStoreInternalTranslogFactory implements TranslogFactory {
             blobStoreRepository,
             threadPool,
             startedPrimarySupplier,
-            remoteTranslogTransferTracker,
-            remoteStoreSettings
+            remoteTranslogTransferTracker
         );
     }
 

@@ -13,7 +13,6 @@ import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.shard.IndexShard;
-import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
@@ -40,11 +39,7 @@ public class RemoteStoreStatsTrackerFactoryTests extends OpenSearchTestCase {
                 RemoteStoreStatsTrackerFactory.Defaults.MOVING_AVERAGE_WINDOW_SIZE_MIN_VALUE
             )
             .build();
-        clusterService = ClusterServiceUtils.createClusterService(
-            settings,
-            new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
-            threadPool
-        );
+        clusterService = new ClusterService(settings, new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), threadPool);
         remoteStoreStatsTrackerFactory = new RemoteStoreStatsTrackerFactory(clusterService, settings);
     }
 
@@ -90,11 +85,7 @@ public class RemoteStoreStatsTrackerFactoryTests extends OpenSearchTestCase {
             "Failed to parse value",
             IllegalArgumentException.class,
             () -> new RemoteStoreStatsTrackerFactory(
-                ClusterServiceUtils.createClusterService(
-                    settings,
-                    new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
-                    threadPool
-                ),
+                new ClusterService(settings, new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), threadPool),
                 settings
             )
         );
@@ -116,11 +107,7 @@ public class RemoteStoreStatsTrackerFactoryTests extends OpenSearchTestCase {
 
     public void testGetDefaultSettings() {
         remoteStoreStatsTrackerFactory = new RemoteStoreStatsTrackerFactory(
-            ClusterServiceUtils.createClusterService(
-                Settings.EMPTY,
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
-                threadPool
-            ),
+            new ClusterService(Settings.EMPTY, new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), threadPool),
             Settings.EMPTY
         );
         // Check moving average window size updated

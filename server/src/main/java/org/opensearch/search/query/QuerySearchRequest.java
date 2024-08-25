@@ -32,6 +32,7 @@
 
 package org.opensearch.search.query;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.action.IndicesRequest;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.action.search.SearchShardTask;
@@ -79,7 +80,11 @@ public class QuerySearchRequest extends TransportRequest implements IndicesReque
         contextId = new ShardSearchContextId(in);
         dfs = new AggregatedDfs(in);
         originalIndices = OriginalIndices.readOriginalIndices(in);
-        shardSearchRequest = in.readOptionalWriteable(ShardSearchRequest::new);
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            this.shardSearchRequest = in.readOptionalWriteable(ShardSearchRequest::new);
+        } else {
+            this.shardSearchRequest = null;
+        }
     }
 
     @Override
@@ -88,7 +93,9 @@ public class QuerySearchRequest extends TransportRequest implements IndicesReque
         contextId.writeTo(out);
         dfs.writeTo(out);
         OriginalIndices.writeOriginalIndices(originalIndices, out);
-        out.writeOptionalWriteable(shardSearchRequest);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            out.writeOptionalWriteable(shardSearchRequest);
+        }
     }
 
     public ShardSearchContextId contextId() {

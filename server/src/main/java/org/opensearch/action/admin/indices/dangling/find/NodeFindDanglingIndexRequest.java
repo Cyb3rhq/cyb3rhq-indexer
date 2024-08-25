@@ -32,9 +32,9 @@
 
 package org.opensearch.action.admin.indices.dangling.find;
 
+import org.opensearch.action.support.nodes.BaseNodeRequest;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.transport.TransportRequest;
 
 import java.io.IOException;
 
@@ -43,7 +43,7 @@ import java.io.IOException;
  *
  * @opensearch.internal
  */
-public class NodeFindDanglingIndexRequest extends TransportRequest {
+public class NodeFindDanglingIndexRequest extends BaseNodeRequest {
     private final String indexUUID;
 
     public NodeFindDanglingIndexRequest(String indexUUID) {

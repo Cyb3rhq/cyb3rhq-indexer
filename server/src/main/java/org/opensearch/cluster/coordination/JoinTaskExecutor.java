@@ -31,8 +31,8 @@
 
 package org.opensearch.cluster.coordination;
 
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.ClusterStateTaskExecutor;
@@ -52,13 +52,13 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.node.remotestore.RemoteStoreNodeAttribute;
 import org.opensearch.node.remotestore.RemoteStoreNodeService;
 import org.opensearch.persistent.PersistentTasksCustomMetadata;
+import org.opensearch.transport.TransportService;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -68,7 +68,6 @@ import java.util.stream.Collectors;
 import static org.opensearch.cluster.decommission.DecommissionHelper.nodeCommissioned;
 import static org.opensearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK;
 import static org.opensearch.node.remotestore.RemoteStoreNodeService.CompatibilityMode;
-import static org.opensearch.node.remotestore.RemoteStoreNodeService.CompatibilityMode.MIXED;
 import static org.opensearch.node.remotestore.RemoteStoreNodeService.CompatibilityMode.STRICT;
 import static org.opensearch.node.remotestore.RemoteStoreNodeService.REMOTE_STORE_COMPATIBILITY_MODE_SETTING;
 
@@ -81,8 +80,9 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
 
     private final AllocationService allocationService;
 
-    private static Logger logger = LogManager.getLogger(JoinTaskExecutor.class);
+    private final Logger logger;
     private final RerouteService rerouteService;
+    private final TransportService transportService;
 
     private final RemoteStoreNodeService remoteStoreNodeService;
 
@@ -142,11 +142,13 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         AllocationService allocationService,
         Logger logger,
         RerouteService rerouteService,
+        TransportService transportService,
         RemoteStoreNodeService remoteStoreNodeService
     ) {
         this.allocationService = allocationService;
-        JoinTaskExecutor.logger = logger;
+        this.logger = logger;
         this.rerouteService = rerouteService;
+        this.transportService = transportService;
         this.remoteStoreNodeService = remoteStoreNodeService;
     }
 
@@ -199,12 +201,12 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         // processing any joins
         Map<String, String> joiniedNodeNameIds = new HashMap<>();
         for (final Task joinTask : joiningNodes) {
-            final DiscoveryNode node = joinTask.node();
             if (joinTask.isBecomeClusterManagerTask() || joinTask.isFinishElectionTask()) {
                 // noop
-            } else if (currentNodes.nodeExistsWithSameRoles(node)) {
-                logger.debug("received a join request for an existing node [{}]", node);
+            } else if (currentNodes.nodeExistsWithSameRoles(joinTask.node()) && !currentNodes.nodeExistsWithBWCVersion(joinTask.node())) {
+                logger.debug("received a join request for an existing node [{}]", joinTask.node());
             } else {
+                final DiscoveryNode node = joinTask.node();
                 try {
                     if (enforceMajorVersion) {
                         ensureMajorVersionBarrier(node.getVersion(), minClusterNodeVersion);
@@ -218,7 +220,7 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
                     ensureNodeCommissioned(node, currentState.metadata());
                     nodesBuilder.add(node);
 
-                    if (remoteDN.isEmpty() && node.isRemoteStoreNode()) {
+                    if (remoteDN.isEmpty()) {
                         // This is hit only on cases where we encounter first remote node
                         logger.info("Updating system repository now for remote store");
                         repositoriesMetadata = remoteStoreNodeService.updateRepositoriesMetadata(
@@ -311,7 +313,9 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         nodesBuilder.clusterManagerNodeId(currentState.nodes().getLocalNodeId());
 
         for (final Task joinTask : joiningNodes) {
-            if (joinTask.isBecomeClusterManagerTask() || joinTask.isFinishElectionTask()) {
+            if (joinTask.isBecomeClusterManagerTask()) {
+                refreshDiscoveryNodeVersionAfterUpgrade(currentNodes, nodesBuilder);
+            } else if (joinTask.isFinishElectionTask()) {
                 // no-op
             } else {
                 final DiscoveryNode joiningNode = joinTask.node();
@@ -346,6 +350,60 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         allocationService.cleanCaches();
         tmpState = PersistentTasksCustomMetadata.disassociateDeadNodes(tmpState);
         return ClusterState.builder(allocationService.disassociateDeadNodes(tmpState, false, "removed dead nodes on election"));
+    }
+
+    private void refreshDiscoveryNodeVersionAfterUpgrade(DiscoveryNodes currentNodes, DiscoveryNodes.Builder nodesBuilder) {
+        // During the upgrade from Elasticsearch, OpenSearch node send their version as 7.10.2 to Elasticsearch master
+        // in order to successfully join the cluster. But as soon as OpenSearch node becomes the master, cluster state
+        // should show the OpenSearch nodes version as 1.x. As the cluster state was carry forwarded from ES master,
+        // version in DiscoveryNode is stale 7.10.2. As soon as OpenSearch node becomes master, it can refresh the
+        // DiscoveryNodes version and publish the updated state while finishing the election. This helps in atomically
+        // updating the version of those node which have connection with the new master.
+        // Note: This should get deprecated with BWC mode logic
+        if (null == transportService) {
+            // this logic is only applicable when OpenSearch node is cluster-manager and is noop for zen discovery node
+            return;
+        }
+        if (currentNodes.getMinNodeVersion().before(Version.V_1_0_0)) {
+            Map<String, Version> channelVersions = transportService.getChannelVersion(currentNodes);
+            for (DiscoveryNode node : currentNodes) {
+                if (channelVersions.containsKey(node.getId())) {
+                    if (channelVersions.get(node.getId()) != node.getVersion()) {
+                        DiscoveryNode tmpNode = nodesBuilder.get(node.getId());
+                        nodesBuilder.remove(node.getId());
+                        nodesBuilder.add(
+                            new DiscoveryNode(
+                                tmpNode.getName(),
+                                tmpNode.getId(),
+                                tmpNode.getEphemeralId(),
+                                tmpNode.getHostName(),
+                                tmpNode.getHostAddress(),
+                                tmpNode.getAddress(),
+                                tmpNode.getAttributes(),
+                                tmpNode.getRoles(),
+                                channelVersions.get(tmpNode.getId())
+                            )
+                        );
+                        logger.info(
+                            "Refreshed the DiscoveryNode version for node {}:{} from {} to {}",
+                            node.getId(),
+                            node.getAddress(),
+                            node.getVersion(),
+                            channelVersions.get(tmpNode.getId())
+                        );
+                    }
+                } else {
+                    // in case existing OpenSearch node is present in the cluster and but there is no connection to that node yet,
+                    // either that node will send new JoinRequest to the cluster-manager/master with version >=1.0, then no issue or
+                    // there is an edge case if doesn't send JoinRequest and connection is established,
+                    // then it can continue to report version as 7.10.2 instead of actual OpenSearch version. So,
+                    // removing the node from cluster state to prevent stale version reporting and let it reconnect.
+                    if (node.getVersion().equals(LegacyESVersion.V_7_10_2)) {
+                        nodesBuilder.remove(node.getId());
+                    }
+                }
+            }
+        }
     }
 
     @Override
@@ -511,27 +569,11 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         assert existingNodes.isEmpty() == false;
 
         CompatibilityMode remoteStoreCompatibilityMode = REMOTE_STORE_COMPATIBILITY_MODE_SETTING.get(metadata.settings());
-
-        List<String> reposToSkip = new ArrayList<>(1);
-        Optional<DiscoveryNode> remoteRoutingTableNode = existingNodes.stream()
-            .filter(
-                node -> node.getAttributes().get(RemoteStoreNodeAttribute.REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY) != null
-            )
-            .findFirst();
-        // If none of the existing nodes have routing table repo, then we skip this repo check if present in joining node.
-        // This ensures a new node with remote routing table repo is able to join the cluster.
-        if (remoteRoutingTableNode.isEmpty()) {
-            String joiningNodeRepoName = joiningNode.getAttributes()
-                .get(RemoteStoreNodeAttribute.REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY);
-            if (joiningNodeRepoName != null) {
-                reposToSkip.add(joiningNodeRepoName);
-            }
-        }
-
         if (STRICT.equals(remoteStoreCompatibilityMode)) {
-            DiscoveryNode existingNode = remoteRoutingTableNode.orElseGet(() -> existingNodes.get(0));
+
+            DiscoveryNode existingNode = existingNodes.get(0);
             if (joiningNode.isRemoteStoreNode()) {
-                ensureRemoteStoreNodesCompatibility(joiningNode, existingNode, reposToSkip);
+                ensureRemoteStoreNodesCompatibility(joiningNode, existingNode);
             } else {
                 if (existingNode.isRemoteStoreNode()) {
                     throw new IllegalStateException(
@@ -540,38 +582,21 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
                 }
             }
         } else {
-            if (MIXED.equals(remoteStoreCompatibilityMode)) {
-                if (joiningNode.getVersion().after(currentNodes.getMaxNodeVersion())) {
-                    String reason = String.format(
-                        Locale.ROOT,
-                        "remote migration : a node [%s] of higher version [%s] is not allowed to join a cluster with maximum version [%s]",
-                        joiningNode,
-                        joiningNode.getVersion(),
-                        currentNodes.getMaxNodeVersion()
-                    );
-                    logger.warn(reason);
-                    throw new IllegalStateException(reason);
-                }
+            if (remoteStoreCompatibilityMode == CompatibilityMode.MIXED) {
                 if (joiningNode.isRemoteStoreNode()) {
-                    Optional<DiscoveryNode> remoteDN = remoteRoutingTableNode.isPresent()
-                        ? remoteRoutingTableNode
-                        : existingNodes.stream().filter(DiscoveryNode::isRemoteStoreNode).findFirst();
-                    remoteDN.ifPresent(discoveryNode -> ensureRemoteStoreNodesCompatibility(joiningNode, discoveryNode, reposToSkip));
+                    Optional<DiscoveryNode> remoteDN = existingNodes.stream().filter(DiscoveryNode::isRemoteStoreNode).findFirst();
+                    remoteDN.ifPresent(discoveryNode -> ensureRemoteStoreNodesCompatibility(joiningNode, discoveryNode));
                 }
             }
         }
     }
 
-    private static void ensureRemoteStoreNodesCompatibility(
-        DiscoveryNode joiningNode,
-        DiscoveryNode existingNode,
-        List<String> reposToSkip
-    ) {
+    private static void ensureRemoteStoreNodesCompatibility(DiscoveryNode joiningNode, DiscoveryNode existingNode) {
         if (joiningNode.isRemoteStoreNode()) {
             if (existingNode.isRemoteStoreNode()) {
                 RemoteStoreNodeAttribute joiningRemoteStoreNodeAttribute = new RemoteStoreNodeAttribute(joiningNode);
                 RemoteStoreNodeAttribute existingRemoteStoreNodeAttribute = new RemoteStoreNodeAttribute(existingNode);
-                if (existingRemoteStoreNodeAttribute.equalsWithRepoSkip(joiningRemoteStoreNodeAttribute, reposToSkip) == false) {
+                if (existingRemoteStoreNodeAttribute.equals(joiningRemoteStoreNodeAttribute) == false) {
                     throw new IllegalStateException(
                         "a remote store node ["
                             + joiningNode

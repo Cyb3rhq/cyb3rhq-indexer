@@ -31,9 +31,9 @@
 
 package org.opensearch.test.rest.yaml;
 
-import org.apache.hc.client5.http.classic.methods.HttpHead;
-import org.apache.hc.core5.http.Header;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.http.Header;
+import org.apache.http.client.methods.HttpHead;
+import org.apache.http.util.EntityUtils;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.XContentFactory;

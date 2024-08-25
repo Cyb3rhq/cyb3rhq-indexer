@@ -45,7 +45,6 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsException;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.action.ActionListener;
@@ -83,7 +82,7 @@ public class CreateIndexIT extends OpenSearchIntegTestCase {
         try {
             prepareCreate("test").setSettings(Settings.builder().put(IndexMetadata.SETTING_CREATION_DATE, 4L)).get();
             fail();
-        } catch (SettingsException ex) {
+        } catch (IllegalArgumentException ex) {
             assertEquals(
                 "unknown setting [index.creation_date] please check that any required plugins are installed, or check the "
                     + "breaking changes documentation for removed settings",
@@ -204,7 +203,7 @@ public class CreateIndexIT extends OpenSearchIntegTestCase {
         try {
             prepareCreate("test").setSettings(Settings.builder().put("index.unknown.value", "this must fail").build()).get();
             fail("should have thrown an exception about the shard count");
-        } catch (SettingsException e) {
+        } catch (IllegalArgumentException e) {
             assertEquals(
                 "unknown setting [index.unknown.value] please check that any required plugins are installed, or check the"
                     + " breaking changes documentation for removed settings",
@@ -406,28 +405,4 @@ public class CreateIndexIT extends OpenSearchIntegTestCase {
         assertEquals("Should have index name in response", "foo", response.index());
     }
 
-    public void testCreateIndexWithNullReplicaCountPickUpClusterReplica() {
-        int numReplicas = 3;
-        String indexName = "test-idx-1";
-        assertAcked(
-            client().admin()
-                .cluster()
-                .prepareUpdateSettings()
-                .setPersistentSettings(Settings.builder().put("cluster.default_number_of_replicas", numReplicas).build())
-                .get()
-        );
-        Settings settings = Settings.builder()
-            .put(IndexMetadata.INDEX_NUMBER_OF_SHARDS_SETTING.getKey(), 1)
-            .put(IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), (String) null)
-            .build();
-        assertAcked(client().admin().indices().prepareCreate(indexName).setSettings(settings).get());
-        IndicesService indicesService = internalCluster().getInstance(IndicesService.class, internalCluster().getClusterManagerName());
-        for (IndexService indexService : indicesService) {
-            assertEquals(indexName, indexService.index().getName());
-            assertEquals(
-                numReplicas,
-                (int) indexService.getIndexSettings().getSettings().getAsInt(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, null)
-            );
-        }
-    }
 }

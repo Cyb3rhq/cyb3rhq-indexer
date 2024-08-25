@@ -84,7 +84,6 @@ import org.opensearch.index.translog.InternalTranslogFactory;
 import org.opensearch.index.translog.TestTranslog;
 import org.opensearch.index.translog.Translog;
 import org.opensearch.index.translog.TranslogStats;
-import org.opensearch.indices.DefaultRemoteStoreSettings;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.recovery.RecoveryState;
 import org.opensearch.indices.replication.checkpoint.SegmentReplicationCheckpointPublisher;
@@ -249,7 +248,7 @@ public class IndexShardIT extends OpenSearchSingleNodeTestCase {
 
     public void testIndexDirIsDeletedWhenShardRemoved() throws Exception {
         Environment env = getInstanceFromNode(Environment.class);
-        Path idxPath = env.sharedDataDir().resolve(randomAlphaOfLength(10));
+        Path idxPath = env.sharedDataFile().resolve(randomAlphaOfLength(10));
         logger.info("--> idxPath: [{}]", idxPath);
         Settings idxSettings = Settings.builder().put(IndexMetadata.SETTING_DATA_PATH, idxPath).build();
         createIndex("test", idxSettings);
@@ -284,18 +283,11 @@ public class IndexShardIT extends OpenSearchSingleNodeTestCase {
 
     public void testIndexCanChangeCustomDataPath() throws Exception {
         final String index = "test-custom-data-path";
-        final Path sharedDataPath = getInstanceFromNode(Environment.class).sharedDataDir().resolve(randomAsciiLettersOfLength(10));
+        final Path sharedDataPath = getInstanceFromNode(Environment.class).sharedDataFile().resolve(randomAsciiLettersOfLength(10));
         final Path indexDataPath = sharedDataPath.resolve("start-" + randomAsciiLettersOfLength(10));
 
         logger.info("--> creating index [{}] with data_path [{}]", index, indexDataPath);
-        createIndex(
-            index,
-            Settings.builder()
-                .put(IndexMetadata.SETTING_DATA_PATH, indexDataPath.toAbsolutePath().toString())
-                .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.REQUEST)
-                .put(IndexSettings.INDEX_MERGE_ON_FLUSH_ENABLED.getKey(), false)
-                .build()
-        );
+        createIndex(index, Settings.builder().put(IndexMetadata.SETTING_DATA_PATH, indexDataPath.toAbsolutePath().toString()).build());
         client().prepareIndex(index).setId("1").setSource("foo", "bar").setRefreshPolicy(IMMEDIATE).get();
         ensureGreen(index);
 
@@ -313,16 +305,6 @@ public class IndexShardIT extends OpenSearchSingleNodeTestCase {
         // Now, try closing and changing the settings
         logger.info("--> closing the index [{}] before updating data_path", index);
         assertAcked(client().admin().indices().prepareClose(index).setWaitForActiveShards(ActiveShardCount.DEFAULT));
-
-        // race condition: async flush may cause translog file deletion resulting in an inconsistent stream from
-        // Files.walk below during copy phase
-        // temporarily disable refresh to avoid any flushes or syncs that may inadvertently cause the deletion
-        assertAcked(
-            client().admin()
-                .indices()
-                .prepareUpdateSettings(index)
-                .setSettings(Settings.builder().put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), "-1").build())
-        );
 
         final Path newIndexDataPath = sharedDataPath.resolve("end-" + randomAlphaOfLength(10));
         IOUtils.rm(newIndexDataPath);
@@ -343,17 +325,11 @@ public class IndexShardIT extends OpenSearchSingleNodeTestCase {
         }
 
         logger.info("--> updating data_path to [{}] for index [{}]", newIndexDataPath, index);
-        // update data path and re-enable refresh
         assertAcked(
             client().admin()
                 .indices()
                 .prepareUpdateSettings(index)
-                .setSettings(
-                    Settings.builder()
-                        .put(IndexMetadata.SETTING_DATA_PATH, newIndexDataPath.toAbsolutePath().toString())
-                        .put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), IndexSettings.DEFAULT_REFRESH_INTERVAL.toString())
-                        .build()
-                )
+                .setSettings(Settings.builder().put(IndexMetadata.SETTING_DATA_PATH, newIndexDataPath.toAbsolutePath().toString()).build())
                 .setIndicesOptions(IndicesOptions.fromOptions(true, false, true, true))
         );
 
@@ -712,11 +688,9 @@ public class IndexShardIT extends OpenSearchSingleNodeTestCase {
             SegmentReplicationCheckpointPublisher.EMPTY,
             null,
             null,
+            () -> IndexSettings.DEFAULT_REMOTE_TRANSLOG_BUFFER_INTERVAL,
             nodeId,
-            null,
-            DefaultRemoteStoreSettings.INSTANCE,
-            false,
-            IndexShardTestUtils.getFakeDiscoveryNodes(initializingShardRouting)
+            null
         );
     }
 

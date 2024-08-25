@@ -36,7 +36,7 @@ import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.painless.PainlessModulePlugin;
+import org.opensearch.painless.PainlessPlugin;
 import org.opensearch.painless.action.PainlessExecuteAction.Request;
 import org.opensearch.painless.action.PainlessExecuteAction.Response;
 import org.opensearch.plugins.Plugin;
@@ -60,7 +60,7 @@ public class PainlessExecuteApiTests extends OpenSearchSingleNodeTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Collections.singleton(PainlessModulePlugin.class);
+        return Collections.singleton(PainlessPlugin.class);
     }
 
     public void testDefaults() throws IOException {

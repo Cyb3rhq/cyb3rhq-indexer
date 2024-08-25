@@ -161,8 +161,7 @@ public class ExtensionsManager {
         this.addSettingsUpdateConsumerRequestHandler = new AddSettingsUpdateConsumerRequestHandler(
             clusterService,
             transportService,
-            REQUEST_EXTENSION_UPDATE_SETTINGS,
-            settingsModule
+            REQUEST_EXTENSION_UPDATE_SETTINGS
         );
         this.client = client;
         this.extensionTransportActionsHandler = new ExtensionTransportActionsHandler(

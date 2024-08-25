@@ -67,7 +67,7 @@ public class RemoteTransferContainerTests extends OpenSearchTestCase {
                         return new OffsetRangeFileInputStream(testFile, size, position);
                     }
                 },
-                0L,
+                0,
                 false
             )
         ) {
@@ -89,7 +89,7 @@ public class RemoteTransferContainerTests extends OpenSearchTestCase {
                         return new OffsetRangeFileInputStream(testFile, size, position);
                     }
                 },
-                0L,
+                0,
                 false
             )
         ) {
@@ -155,7 +155,7 @@ public class RemoteTransferContainerTests extends OpenSearchTestCase {
                         return new OffsetRangeFileInputStream(testFile, size, position);
                     }
                 },
-                0L,
+                0,
                 false
             )
         ) {
@@ -223,7 +223,7 @@ public class RemoteTransferContainerTests extends OpenSearchTestCase {
                         return new OffsetRangeFileInputStream(testFile, size, position);
                     }
                 },
-                0L,
+                0,
                 isRemoteDataIntegritySupported
             )
         ) {
@@ -286,7 +286,7 @@ public class RemoteTransferContainerTests extends OpenSearchTestCase {
                         return new RateLimitingOffsetRangeInputStream(offsetRangeIndexInputStream, rateLimiterSupplier, null);
                     }
                 },
-                0L,
+                0,
                 true
             )
         ) {
@@ -347,7 +347,7 @@ public class RemoteTransferContainerTests extends OpenSearchTestCase {
                         return new RateLimitingOffsetRangeInputStream(offsetRangeIndexInputStream, rateLimiterSupplier, null);
                     }
                 },
-                0L,
+                0,
                 true
             )
         ) {

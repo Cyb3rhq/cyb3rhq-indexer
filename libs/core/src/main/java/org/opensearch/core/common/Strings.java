@@ -227,7 +227,7 @@ public class Strings {
         // the index of an occurrence we've found, or -1
         int patLen = oldPattern.length();
         while (index >= 0) {
-            sb.append(inString, pos, index);
+            sb.append(inString.substring(pos, index));
             sb.append(newPattern);
             pos = index + patLen;
             index = inString.indexOf(oldPattern, pos);
@@ -343,7 +343,7 @@ public class Strings {
         if (collection == null) {
             return null;
         }
-        return collection.toArray(new String[0]);
+        return collection.toArray(new String[collection.size()]);
     }
 
     /**

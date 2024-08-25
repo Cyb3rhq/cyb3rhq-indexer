@@ -35,7 +35,6 @@ import org.apache.lucene.search.highlight.DefaultEncoder;
 import org.apache.lucene.search.highlight.Encoder;
 import org.apache.lucene.search.highlight.SimpleHTMLEncoder;
 import org.opensearch.index.fieldvisitor.CustomFieldsVisitor;
-import org.opensearch.index.mapper.DerivedFieldValueFetcher;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.ValueFetcher;
 import org.opensearch.index.query.QueryShardContext;
@@ -78,9 +77,6 @@ public final class HighlightUtils {
             return textsToHighlight != null ? textsToHighlight : Collections.emptyList();
         }
         ValueFetcher fetcher = fieldType.valueFetcher(context, null, null);
-        if (fetcher instanceof DerivedFieldValueFetcher) {
-            fetcher.setNextReader(hitContext.reader().getContext());
-        }
         return fetcher.fetchValues(hitContext.sourceLookup());
     }
 

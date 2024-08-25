@@ -8,7 +8,6 @@
 
 package org.opensearch.search.backpressure.trackers;
 
-import org.opensearch.search.backpressure.trackers.NodeDuressTrackers.NodeDuressTracker;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.concurrent.atomic.AtomicReference;
@@ -17,20 +16,20 @@ public class NodeDuressTrackerTests extends OpenSearchTestCase {
 
     public void testNodeDuressTracker() {
         AtomicReference<Double> cpuUsage = new AtomicReference<>(0.0);
-        NodeDuressTracker tracker = new NodeDuressTracker(() -> cpuUsage.get() >= 0.5, () -> 3);
+        NodeDuressTracker tracker = new NodeDuressTracker(() -> cpuUsage.get() >= 0.5);
 
         // Node not in duress.
-        assertFalse(tracker.test());
+        assertEquals(0, tracker.check());
 
         // Node in duress; the streak must keep increasing.
         cpuUsage.set(0.7);
-        assertFalse(tracker.test());
-        assertFalse(tracker.test());
-        assertTrue(tracker.test());
+        assertEquals(1, tracker.check());
+        assertEquals(2, tracker.check());
+        assertEquals(3, tracker.check());
 
         // Node not in duress anymore.
         cpuUsage.set(0.3);
-        assertFalse(tracker.test());
-        assertFalse(tracker.test());
+        assertEquals(0, tracker.check());
+        assertEquals(0, tracker.check());
     }
 }

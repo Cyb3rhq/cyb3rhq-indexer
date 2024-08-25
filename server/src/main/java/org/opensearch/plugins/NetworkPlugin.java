@@ -139,7 +139,7 @@ public interface NetworkPlugin {
         NetworkService networkService,
         HttpServerTransport.Dispatcher dispatcher,
         ClusterSettings clusterSettings,
-        SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider,
+        SecureTransportSettingsProvider secureTransportSettingsProvider,
         Tracer tracer
     ) {
         return Collections.emptyMap();

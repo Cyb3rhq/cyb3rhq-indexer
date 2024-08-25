@@ -50,6 +50,7 @@ import org.opensearch.common.inject.Inject;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.index.Index;
+import org.opensearch.index.IndexModule;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.TransportService;
 
@@ -57,6 +58,8 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Stream;
+
+import static org.opensearch.index.IndexModule.INDEX_STORE_TYPE_SETTING;
 
 /**
  * Transport action for updating index settings
@@ -130,7 +133,9 @@ public class TransportUpdateSettingsAction extends TransportClusterManagerNodeAc
         for (Index index : requestIndices) {
             if (state.blocks().indexBlocked(ClusterBlockLevel.METADATA_WRITE, index.getName())) {
                 allowSearchableSnapshotSettingsUpdate = allowSearchableSnapshotSettingsUpdate
-                    && state.getMetadata().getIndexSafe(index).isRemoteSnapshot();
+                    && IndexModule.Type.REMOTE_SNAPSHOT.match(
+                        state.getMetadata().getIndexSafe(index).getSettings().get(INDEX_STORE_TYPE_SETTING.getKey())
+                    );
             }
         }
         // check if all settings in the request are in the allow list

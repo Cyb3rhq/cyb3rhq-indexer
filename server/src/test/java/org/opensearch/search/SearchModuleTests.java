@@ -59,6 +59,7 @@ import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
 import org.opensearch.search.aggregations.bucket.terms.heuristic.ChiSquare;
 import org.opensearch.search.aggregations.pipeline.AbstractPipelineAggregationBuilder;
 import org.opensearch.search.aggregations.pipeline.DerivativePipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.DerivativePipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.InternalDerivative;
 import org.opensearch.search.aggregations.pipeline.MovAvgModel;
 import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
@@ -204,6 +205,7 @@ public class SearchModuleTests extends OpenSearchTestCase {
                     new PipelineAggregationSpec(
                         DerivativePipelineAggregationBuilder.NAME,
                         DerivativePipelineAggregationBuilder::new,
+                        DerivativePipelineAggregator::new,
                         DerivativePipelineAggregationBuilder::parse
                     ).addResultReader(InternalDerivative::new)
                 );
@@ -385,7 +387,12 @@ public class SearchModuleTests extends OpenSearchTestCase {
             @Override
             public List<PipelineAggregationSpec> getPipelineAggregations() {
                 return singletonList(
-                    new PipelineAggregationSpec("test", TestPipelineAggregationBuilder::new, TestPipelineAggregationBuilder::fromXContent)
+                    new PipelineAggregationSpec(
+                        "test",
+                        TestPipelineAggregationBuilder::new,
+                        TestPipelineAggregator::new,
+                        TestPipelineAggregationBuilder::fromXContent
+                    )
                 );
             }
         }));
@@ -654,9 +661,20 @@ public class SearchModuleTests extends OpenSearchTestCase {
      * Dummy test {@link PipelineAggregator} used to test registering aggregation builders.
      */
     private static class TestPipelineAggregator extends PipelineAggregator {
-        TestPipelineAggregator() {
-            super("test", new String[] {}, null);
+        /**
+         * Read from a stream.
+         */
+        TestPipelineAggregator(StreamInput in) throws IOException {
+            super(in);
         }
+
+        @Override
+        public String getWriteableName() {
+            return "test";
+        }
+
+        @Override
+        protected void doWriteTo(StreamOutput out) throws IOException {}
 
         @Override
         public InternalAggregation reduce(InternalAggregation aggregation, ReduceContext reduceContext) {

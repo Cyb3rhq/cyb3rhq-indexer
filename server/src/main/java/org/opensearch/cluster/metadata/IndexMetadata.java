@@ -43,7 +43,6 @@ import org.opensearch.cluster.block.ClusterBlock;
 import org.opensearch.cluster.block.ClusterBlockLevel;
 import org.opensearch.cluster.node.DiscoveryNodeFilters;
 import org.opensearch.cluster.routing.allocation.IndexMetadataUpdater;
-import org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.collect.MapBuilder;
@@ -66,7 +65,6 @@ import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.gateway.MetadataStateFormat;
-import org.opensearch.index.IndexModule;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.seqno.SequenceNumbers;
 import org.opensearch.indices.replication.common.ReplicationType;
@@ -637,10 +635,10 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
     static final String KEY_ROLLOVER_INFOS = "rollover_info";
     static final String KEY_SYSTEM = "system";
     public static final String KEY_PRIMARY_TERMS = "primary_terms";
-    public static final String REMOTE_STORE_CUSTOM_KEY = "remote_store";
-    public static final String TRANSLOG_METADATA_KEY = "translog_metadata";
 
     public static final String INDEX_STATE_FILE_PREFIX = "state-";
+
+    static final Version SYSTEM_INDEX_FLAG_ADDED = LegacyESVersion.V_7_10_0;
 
     private final int routingNumShards;
     private final int routingFactor;
@@ -685,9 +683,6 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
     private final ActiveShardCount waitForActiveShards;
     private final Map<String, RolloverInfo> rolloverInfos;
     private final boolean isSystem;
-    private final boolean isRemoteSnapshot;
-
-    private final int indexTotalShardsPerNodeLimit;
 
     private IndexMetadata(
         final Index index,
@@ -714,8 +709,7 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
         final int routingPartitionSize,
         final ActiveShardCount waitForActiveShards,
         final Map<String, RolloverInfo> rolloverInfos,
-        final boolean isSystem,
-        final int indexTotalShardsPerNodeLimit
+        final boolean isSystem
     ) {
 
         this.index = index;
@@ -749,8 +743,6 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
         this.waitForActiveShards = waitForActiveShards;
         this.rolloverInfos = Collections.unmodifiableMap(rolloverInfos);
         this.isSystem = isSystem;
-        this.isRemoteSnapshot = IndexModule.Type.REMOTE_SNAPSHOT.match(this.settings);
-        this.indexTotalShardsPerNodeLimit = indexTotalShardsPerNodeLimit;
         assert numberOfShards * routingFactor == routingNumShards : routingNumShards + " must be a multiple of " + numberOfShards;
     }
 
@@ -902,10 +894,6 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
     public Set<String> inSyncAllocationIds(int shardId) {
         assert shardId >= 0 && shardId < numberOfShards;
         return inSyncAllocationIds.get(shardId);
-    }
-
-    public int getIndexTotalShardsPerNodeLimit() {
-        return this.indexTotalShardsPerNodeLimit;
     }
 
     @Nullable
@@ -1080,7 +1068,11 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
             version = in.readLong();
             mappingVersion = in.readVLong();
             settingsVersion = in.readVLong();
-            aliasesVersion = in.readVLong();
+            if (in.getVersion().onOrAfter(LegacyESVersion.V_7_2_0)) {
+                aliasesVersion = in.readVLong();
+            } else {
+                aliasesVersion = 1;
+            }
             state = State.fromId(in.readByte());
             settings = Settings.readSettingsFromStream(in);
             primaryTerms = in.readVLongArray();
@@ -1093,7 +1085,11 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
                 DiffableUtils.StringSetValueSerializer.getInstance()
             );
             rolloverInfos = DiffableUtils.readJdkMapDiff(in, DiffableUtils.getStringKeySerializer(), ROLLOVER_INFO_DIFF_VALUE_READER);
-            isSystem = in.readBoolean();
+            if (in.getVersion().onOrAfter(SYSTEM_INDEX_FLAG_ADDED)) {
+                isSystem = in.readBoolean();
+            } else {
+                isSystem = false;
+            }
         }
 
         @Override
@@ -1103,7 +1099,9 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
             out.writeLong(version);
             out.writeVLong(mappingVersion);
             out.writeVLong(settingsVersion);
-            out.writeVLong(aliasesVersion);
+            if (out.getVersion().onOrAfter(LegacyESVersion.V_7_2_0)) {
+                out.writeVLong(aliasesVersion);
+            }
             out.writeByte(state.id);
             Settings.writeSettingsToStream(settings, out);
             out.writeVLongArray(primaryTerms);
@@ -1112,7 +1110,9 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
             customData.writeTo(out);
             inSyncAllocationIds.writeTo(out);
             rolloverInfos.writeTo(out);
-            out.writeBoolean(isSystem);
+            if (out.getVersion().onOrAfter(SYSTEM_INDEX_FLAG_ADDED)) {
+                out.writeBoolean(isSystem);
+            }
         }
 
         @Override
@@ -1141,7 +1141,11 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
         builder.version(in.readLong());
         builder.mappingVersion(in.readVLong());
         builder.settingsVersion(in.readVLong());
-        builder.aliasesVersion(in.readVLong());
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_2_0)) {
+            builder.aliasesVersion(in.readVLong());
+        } else {
+            builder.aliasesVersion(1);
+        }
         builder.setRoutingNumShards(in.readInt());
         builder.state(State.fromId(in.readByte()));
         builder.settings(readSettingsFromStream(in));
@@ -1172,7 +1176,9 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
         for (int i = 0; i < rolloverAliasesSize; i++) {
             builder.putRolloverInfo(new RolloverInfo(in));
         }
-        builder.system(in.readBoolean());
+        if (in.getVersion().onOrAfter(SYSTEM_INDEX_FLAG_ADDED)) {
+            builder.system(in.readBoolean());
+        }
         return builder.build();
     }
 
@@ -1182,7 +1188,9 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
         out.writeLong(version);
         out.writeVLong(mappingVersion);
         out.writeVLong(settingsVersion);
-        out.writeVLong(aliasesVersion);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_2_0)) {
+            out.writeVLong(aliasesVersion);
+        }
         out.writeInt(routingNumShards);
         out.writeByte(state.id());
         writeSettingsToStream(settings, out);
@@ -1209,15 +1217,13 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
         for (final RolloverInfo cursor : rolloverInfos.values()) {
             cursor.writeTo(out);
         }
-        out.writeBoolean(isSystem);
+        if (out.getVersion().onOrAfter(SYSTEM_INDEX_FLAG_ADDED)) {
+            out.writeBoolean(isSystem);
+        }
     }
 
     public boolean isSystem() {
         return isSystem;
-    }
-
-    public boolean isRemoteSnapshot() {
-        return isRemoteSnapshot;
     }
 
     public static Builder builder(String index) {
@@ -1592,8 +1598,6 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
                 );
             }
 
-            final int indexTotalShardsPerNodeLimit = ShardsLimitAllocationDecider.INDEX_TOTAL_SHARDS_PER_NODE_SETTING.get(settings);
-
             final String uuid = settings.get(SETTING_INDEX_UUID, INDEX_UUID_NA_VALUE);
 
             return new IndexMetadata(
@@ -1621,8 +1625,7 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
                 routingPartitionSize,
                 waitForActiveShards,
                 rolloverInfos,
-                isSystem,
-                indexTotalShardsPerNodeLimit
+                isSystem
             );
         }
 
@@ -1861,18 +1864,15 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
                     throw new IllegalArgumentException("Unexpected token " + token);
                 }
             }
-
-            final Version indexCreatedVersion = indexCreated(builder.settings);
             // Reference:
             // https://github.com/opensearch-project/OpenSearch/blob/4dde0f2a3b445b2fc61dab29c5a2178967f4a3e3/server/src/main/java/org/opensearch/cluster/metadata/IndexMetadata.java#L1620-L1628
-            if (Assertions.ENABLED && indexCreatedVersion.onOrAfter(LegacyESVersion.V_6_5_0)) {
+            Version legacyVersion = LegacyESVersion.fromId(6050099);
+            if (Assertions.ENABLED && indexCreated(builder.settings).onOrAfter(legacyVersion)) {
                 assert mappingVersion : "mapping version should be present for indices";
                 assert settingsVersion : "settings version should be present for indices";
             }
-            // Reference:
-            // https://github.com/opensearch-project/OpenSearch/blob/2e4b27b243d8bd2c515f66cf86c6d1d6a601307f/server/src/main/java/org/opensearch/cluster/metadata/IndexMetadata.java#L1824
-            if (Assertions.ENABLED && indexCreatedVersion.onOrAfter(LegacyESVersion.V_7_2_0)) {
-                assert aliasesVersion : "aliases version should be present for indices";
+            if (Assertions.ENABLED && indexCreated(builder.settings).onOrAfter(LegacyESVersion.V_7_2_0)) {
+                assert aliasesVersion : "aliases version should be present for indices created on or after 7.2.0";
             }
             return builder.build();
         }

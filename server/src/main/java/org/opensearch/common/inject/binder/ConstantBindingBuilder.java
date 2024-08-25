@@ -29,14 +29,11 @@
 
 package org.opensearch.common.inject.binder;
 
-import org.opensearch.common.annotation.PublicApi;
-
 /**
  * Binds to a constant value.
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public interface ConstantBindingBuilder {
 
     /**

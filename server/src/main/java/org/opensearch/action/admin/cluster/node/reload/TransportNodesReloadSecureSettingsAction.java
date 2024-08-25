@@ -38,6 +38,7 @@ import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchException;
 import org.opensearch.action.FailedNodeException;
 import org.opensearch.action.support.ActionFilters;
+import org.opensearch.action.support.nodes.BaseNodeRequest;
 import org.opensearch.action.support.nodes.TransportNodesAction;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.service.ClusterService;
@@ -53,7 +54,6 @@ import org.opensearch.plugins.PluginsService;
 import org.opensearch.plugins.ReloadablePlugin;
 import org.opensearch.tasks.Task;
 import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportRequest;
 import org.opensearch.transport.TransportService;
 
 import java.io.IOException;
@@ -149,7 +149,7 @@ public class TransportNodesReloadSecureSettingsAction extends TransportNodesActi
         final SecureString secureSettingsPassword = request.hasPassword()
             ? request.getSecureSettingsPassword()
             : new SecureString(new char[0]);
-        try (KeyStoreWrapper keystore = KeyStoreWrapper.load(environment.configDir())) {
+        try (KeyStoreWrapper keystore = KeyStoreWrapper.load(environment.configFile())) {
             // reread keystore from config file
             if (keystore == null) {
                 return new NodesReloadSecureSettingsResponse.NodeResponse(
@@ -188,7 +188,7 @@ public class TransportNodesReloadSecureSettingsAction extends TransportNodesActi
      *
      * @opensearch.internal
      */
-    public static class NodeRequest extends TransportRequest {
+    public static class NodeRequest extends BaseNodeRequest {
 
         NodesReloadSecureSettingsRequest request;
 

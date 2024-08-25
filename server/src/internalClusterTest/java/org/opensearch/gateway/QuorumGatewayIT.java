@@ -92,7 +92,7 @@ public class QuorumGatewayIT extends OpenSearchIntegTestCase {
                         logger.info("--> done cluster_health, status {}", clusterHealth.getStatus());
                         assertFalse(clusterHealth.isTimedOut());
                         assertEquals(ClusterHealthStatus.YELLOW, clusterHealth.getStatus());
-                    }, 90, TimeUnit.SECONDS);
+                    }, 30, TimeUnit.SECONDS);
 
                     logger.info("--> one node is closed -- index 1 document into the remaining nodes");
                     activeClient.prepareIndex("test")

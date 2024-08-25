@@ -148,7 +148,7 @@ public class CandidateQueryTests extends OpenSearchSingleNodeTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Collections.singleton(PercolatorModulePlugin.class);
+        return Collections.singleton(PercolatorPlugin.class);
     }
 
     @Before

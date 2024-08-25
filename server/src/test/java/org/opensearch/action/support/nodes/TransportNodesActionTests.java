@@ -46,14 +46,11 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.node.NodeService;
 import org.opensearch.telemetry.tracing.noop.NoopTracer;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.test.transport.CapturingTransport;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportRequest;
 import org.opensearch.transport.TransportService;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -78,12 +75,11 @@ import static org.mockito.Mockito.mock;
 
 public class TransportNodesActionTests extends OpenSearchTestCase {
 
-    protected static ThreadPool THREAD_POOL;
-    protected ClusterService clusterService;
-    protected CapturingTransport transport;
-    protected TransportService transportService;
-    protected NodeService nodeService;
-    protected IndicesService indicesService;
+    private static ThreadPool THREAD_POOL;
+
+    private ClusterService clusterService;
+    private CapturingTransport transport;
+    private TransportService transportService;
 
     public void testRequestIsSentToEachNode() throws Exception {
         TransportNodesAction action = getTestTransportNodesAction();
@@ -109,7 +105,7 @@ public class TransportNodesActionTests extends OpenSearchTestCase {
             String nodeId = randomFrom(nodeIds);
             nodeSelectors.add(nodeId);
         }
-        String[] finalNodesIds = nodeSelectors.toArray(new String[0]);
+        String[] finalNodesIds = nodeSelectors.toArray(new String[nodeSelectors.size()]);
         TestNodesRequest request = new TestNodesRequest(finalNodesIds);
         action.new AsyncAction(null, request, new PlainActionFuture<>()).start();
         Map<String, List<CapturingTransport.CapturedRequest>> capturedRequests = transport.getCapturedRequestsByTargetNodeAndClear();
@@ -384,7 +380,7 @@ public class TransportNodesActionTests extends OpenSearchTestCase {
         }
     }
 
-    private static class TestNodeRequest extends TransportRequest {
+    private static class TestNodeRequest extends BaseNodeRequest {
         TestNodeRequest() {}
 
         TestNodeRequest(StreamInput in) throws IOException {

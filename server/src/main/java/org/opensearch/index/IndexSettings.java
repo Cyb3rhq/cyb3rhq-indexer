@@ -34,6 +34,7 @@ package org.opensearch.index;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.MergePolicy;
 import org.apache.lucene.sandbox.index.MergeOnFlushMergePolicy;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.annotation.PublicApi;
@@ -48,13 +49,10 @@ import org.opensearch.core.common.Strings;
 import org.opensearch.core.common.unit.ByteSizeUnit;
 import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.core.index.Index;
-import org.opensearch.index.remote.RemoteStorePathStrategy;
-import org.opensearch.index.remote.RemoteStoreUtils;
 import org.opensearch.index.translog.Translog;
 import org.opensearch.indices.replication.common.ReplicationType;
 import org.opensearch.ingest.IngestService;
 import org.opensearch.node.Node;
-import org.opensearch.node.remotestore.RemoteStoreNodeAttribute;
 import org.opensearch.search.pipeline.SearchPipelineService;
 
 import java.util.Arrays;
@@ -76,7 +74,6 @@ import static org.opensearch.index.mapper.MapperService.INDEX_MAPPING_NESTED_DOC
 import static org.opensearch.index.mapper.MapperService.INDEX_MAPPING_NESTED_FIELDS_LIMIT_SETTING;
 import static org.opensearch.index.mapper.MapperService.INDEX_MAPPING_TOTAL_FIELDS_LIMIT_SETTING;
 import static org.opensearch.index.store.remote.directory.RemoteSnapshotDirectory.SEARCHABLE_SNAPSHOT_EXTENDED_COMPATIBILITY_MINIMUM_VERSION;
-import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_DEFAULT_VALUE;
 
 /**
  * This class encapsulates all index level settings and handles settings updates.
@@ -152,14 +149,6 @@ public final class IndexSettings {
         true,
         Property.IndexScope
     );
-
-    public static final Setting<Boolean> ALLOW_DERIVED_FIELDS = Setting.boolSetting(
-        "index.query.derived_field.enabled",
-        true,
-        Property.Dynamic,
-        Property.IndexScope
-    );
-
     public static final Setting<TimeValue> INDEX_TRANSLOG_SYNC_INTERVAL_SETTING = Setting.timeSetting(
         "index.translog.sync_interval",
         TimeValue.timeValueSeconds(5),
@@ -284,11 +273,11 @@ public final class IndexSettings {
 
     /**
      * Index setting describing the maximum number of nested scopes in queries.
-     * The default maximum of 20. 1 means once nesting.
+     * The default maximum is 2<sup>31</sup>-1. 1 means once nesting.
      */
     public static final Setting<Integer> MAX_NESTED_QUERY_DEPTH_SETTING = Setting.intSetting(
         "index.query.max_nested_depth",
-        20,
+        Integer.MAX_VALUE,
         1,
         Property.Dynamic,
         Property.IndexScope
@@ -692,14 +681,6 @@ public final class IndexSettings {
         Property.Dynamic
     );
 
-    public static final Setting<Integer> INDEX_CONCURRENT_SEGMENT_SEARCH_MAX_SLICE_COUNT = Setting.intSetting(
-        "index.search.concurrent.max_slice_count",
-        CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_DEFAULT_VALUE,
-        CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_DEFAULT_VALUE,
-        Property.Dynamic,
-        Property.IndexScope
-    );
-
     public static final Setting<Boolean> INDEX_DOC_ID_FUZZY_SET_ENABLED_SETTING = Setting.boolSetting(
         "index.optimize_doc_id_lookup.fuzzy_set.enabled",
         false,
@@ -741,14 +722,13 @@ public final class IndexSettings {
     private final Settings nodeSettings;
     private final int numberOfShards;
     private final ReplicationType replicationType;
-    private volatile boolean isRemoteStoreEnabled;
-    private final boolean isStoreLocalityPartial;
+    private final boolean isRemoteStoreEnabled;
     private volatile TimeValue remoteTranslogUploadBufferInterval;
-    private volatile String remoteStoreTranslogRepository;
-    private volatile String remoteStoreRepository;
+    private final String remoteStoreTranslogRepository;
+    private final String remoteStoreRepository;
+    private final boolean isRemoteSnapshot;
     private int remoteTranslogKeepExtraGen;
     private Version extendedCompatibilitySnapshotVersion;
-
     // volatile fields are updated via #updateIndexMetadata(IndexMetadata) under lock
     private volatile Settings settings;
     private volatile IndexMetadata indexMetadata;
@@ -778,10 +758,6 @@ public final class IndexSettings {
 
     private volatile String defaultSearchPipeline;
     private final boolean widenIndexSortType;
-    private final boolean assignedOnRemoteNode;
-    private final RemoteStorePathStrategy remoteStorePathStrategy;
-    private final boolean isTranslogMetadataEnabled;
-    private volatile boolean allowDerivedField;
 
     /**
      * The maximum age of a retention lease before it is considered expired.
@@ -875,10 +851,6 @@ public final class IndexSettings {
         this.defaultFields = defaultFields;
     }
 
-    private void setAllowDerivedField(boolean allowDerivedField) {
-        this.allowDerivedField = allowDerivedField;
-    }
-
     /**
      * Returns <code>true</code> if query string parsing should be lenient. The default is <code>false</code>
      */
@@ -905,13 +877,6 @@ public final class IndexSettings {
      */
     public boolean isDefaultAllowUnmappedFields() {
         return defaultAllowUnmappedFields;
-    }
-
-    /**
-     * Returns <code>true</code> if queries are allowed to define and use derived fields. The default is <code>true</code>
-     */
-    public boolean isDerivedFieldAllowed() {
-        return allowDerivedField;
     }
 
     /**
@@ -944,28 +909,23 @@ public final class IndexSettings {
         numberOfShards = settings.getAsInt(IndexMetadata.SETTING_NUMBER_OF_SHARDS, null);
         replicationType = IndexMetadata.INDEX_REPLICATION_TYPE_SETTING.get(settings);
         isRemoteStoreEnabled = settings.getAsBoolean(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, false);
-        isStoreLocalityPartial = settings.get(
-            IndexModule.INDEX_STORE_LOCALITY_SETTING.getKey(),
-            IndexModule.DataLocalityType.FULL.toString()
-        ).equalsIgnoreCase(IndexModule.DataLocalityType.PARTIAL.toString());
         remoteStoreTranslogRepository = settings.get(IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY);
         remoteTranslogUploadBufferInterval = INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.get(settings);
         remoteStoreRepository = settings.get(IndexMetadata.SETTING_REMOTE_SEGMENT_STORE_REPOSITORY);
         this.remoteTranslogKeepExtraGen = INDEX_REMOTE_TRANSLOG_KEEP_EXTRA_GEN_SETTING.get(settings);
+        isRemoteSnapshot = IndexModule.Type.REMOTE_SNAPSHOT.match(this.settings);
 
-        if (isRemoteSnapshot() && FeatureFlags.isEnabled(SEARCHABLE_SNAPSHOT_EXTENDED_COMPATIBILITY)) {
+        if (isRemoteSnapshot && FeatureFlags.isEnabled(SEARCHABLE_SNAPSHOT_EXTENDED_COMPATIBILITY)) {
             extendedCompatibilitySnapshotVersion = SEARCHABLE_SNAPSHOT_EXTENDED_COMPATIBILITY_MINIMUM_VERSION;
         } else {
             extendedCompatibilitySnapshotVersion = Version.CURRENT.minimumIndexCompatibilityVersion();
         }
-
         this.searchThrottled = INDEX_SEARCH_THROTTLED.get(settings);
         this.shouldCleanupUnreferencedFiles = INDEX_UNREFERENCED_FILE_CLEANUP.get(settings);
         this.queryStringLenient = QUERY_STRING_LENIENT_SETTING.get(settings);
         this.queryStringAnalyzeWildcard = QUERY_STRING_ANALYZE_WILDCARD.get(nodeSettings);
         this.queryStringAllowLeadingWildcard = QUERY_STRING_ALLOW_LEADING_WILDCARD.get(nodeSettings);
         this.defaultAllowUnmappedFields = scopedSettings.get(ALLOW_UNMAPPED);
-        this.allowDerivedField = scopedSettings.get(ALLOW_DERIVED_FIELDS);
         this.durability = scopedSettings.get(INDEX_TRANSLOG_DURABILITY_SETTING);
         defaultFields = scopedSettings.get(DEFAULT_FIELD_SETTING);
         syncInterval = INDEX_TRANSLOG_SYNC_INTERVAL_SETTING.get(settings);
@@ -1020,10 +980,6 @@ public final class IndexSettings {
          * Now this sortField (IndexSort) is stored in SegmentInfo and we need to maintain backward compatibility for them.
          */
         widenIndexSortType = IndexMetadata.SETTING_INDEX_VERSION_CREATED.get(settings).before(V_2_7_0);
-        assignedOnRemoteNode = RemoteStoreNodeAttribute.isRemoteDataAttributePresent(this.getNodeSettings());
-        remoteStorePathStrategy = RemoteStoreUtils.determineRemoteStorePathStrategy(indexMetadata);
-
-        isTranslogMetadataEnabled = RemoteStoreUtils.determineTranslogMetadataEnabled(indexMetadata);
 
         setEnableFuzzySetForDocId(scopedSettings.get(INDEX_DOC_ID_FUZZY_SET_ENABLED_SETTING));
         setDocIdFuzzySetFalsePositiveProbability(scopedSettings.get(INDEX_DOC_ID_FUZZY_SET_FALSE_POSITIVE_PROBABILITY_SETTING));
@@ -1139,16 +1095,6 @@ public final class IndexSettings {
         scopedSettings.addSettingsUpdateConsumer(
             INDEX_DOC_ID_FUZZY_SET_FALSE_POSITIVE_PROBABILITY_SETTING,
             this::setDocIdFuzzySetFalsePositiveProbability
-        );
-        scopedSettings.addSettingsUpdateConsumer(ALLOW_DERIVED_FIELDS, this::setAllowDerivedField);
-        scopedSettings.addSettingsUpdateConsumer(IndexMetadata.INDEX_REMOTE_STORE_ENABLED_SETTING, this::setRemoteStoreEnabled);
-        scopedSettings.addSettingsUpdateConsumer(
-            IndexMetadata.INDEX_REMOTE_SEGMENT_STORE_REPOSITORY_SETTING,
-            this::setRemoteStoreRepository
-        );
-        scopedSettings.addSettingsUpdateConsumer(
-            IndexMetadata.INDEX_REMOTE_TRANSLOG_REPOSITORY_SETTING,
-            this::setRemoteStoreTranslogRepository
         );
     }
 
@@ -1274,16 +1220,17 @@ public final class IndexSettings {
 
     /**
      * Returns true if segment replication is enabled on the index.
-     *
-     * Every shard on a remote node would also have SegRep enabled even without
-     * proper index setting during the migration.
      */
-    public boolean isSegRepEnabledOrRemoteNode() {
-        return ReplicationType.SEGMENT.equals(replicationType) || isAssignedOnRemoteNode();
+    public boolean isSegRepEnabled() {
+        return ReplicationType.SEGMENT.equals(replicationType);
     }
 
     public boolean isSegRepLocalEnabled() {
-        return ReplicationType.SEGMENT.equals(replicationType) && !isRemoteStoreEnabled();
+        return isSegRepEnabled() && !isRemoteStoreEnabled();
+    }
+
+    public boolean isSegRepWithRemoteEnabled() {
+        return isSegRepEnabled() && isRemoteStoreEnabled();
     }
 
     /**
@@ -1293,8 +1240,11 @@ public final class IndexSettings {
         return isRemoteStoreEnabled;
     }
 
-    public boolean isAssignedOnRemoteNode() {
-        return assignedOnRemoteNode;
+    /**
+     * Returns remote store repository configured for this index.
+     */
+    public String getRemoteStoreRepository() {
+        return remoteStoreRepository;
     }
 
     /**
@@ -1307,28 +1257,10 @@ public final class IndexSettings {
     }
 
     /**
-     * Returns if remote store is enabled for this index.
-     */
-    public String getRemoteStoreRepository() {
-        return remoteStoreRepository;
-    }
-
-    public String getRemoteStoreTranslogRepository() {
-        return remoteStoreTranslogRepository;
-    }
-
-    /**
-     * Returns true if the store locality is partial
-     */
-    public boolean isStoreLocalityPartial() {
-        return isStoreLocalityPartial;
-    }
-
-    /**
      * Returns true if this is remote/searchable snapshot
      */
     public boolean isRemoteSnapshot() {
-        return indexMetadata.isRemoteSnapshot();
+        return isRemoteSnapshot;
     }
 
     /**
@@ -1339,6 +1271,10 @@ public final class IndexSettings {
      */
     public Version getExtendedCompatibilitySnapshotVersion() {
         return extendedCompatibilitySnapshotVersion;
+    }
+
+    public String getRemoteStoreTranslogRepository() {
+        return remoteStoreTranslogRepository;
     }
 
     /**
@@ -1505,7 +1441,8 @@ public final class IndexSettings {
     }
 
     private static boolean shouldDisableTranslogRetention(Settings settings) {
-        return INDEX_SOFT_DELETES_SETTING.get(settings);
+        return INDEX_SOFT_DELETES_SETTING.get(settings)
+            && IndexMetadata.SETTING_INDEX_VERSION_CREATED.get(settings).onOrAfter(LegacyESVersion.V_7_4_0);
     }
 
     /**
@@ -1959,25 +1896,5 @@ public final class IndexSettings {
 
     public void setDocIdFuzzySetFalsePositiveProbability(double docIdFuzzySetFalsePositiveProbability) {
         this.docIdFuzzySetFalsePositiveProbability = docIdFuzzySetFalsePositiveProbability;
-    }
-
-    public RemoteStorePathStrategy getRemoteStorePathStrategy() {
-        return remoteStorePathStrategy;
-    }
-
-    public boolean isTranslogMetadataEnabled() {
-        return isTranslogMetadataEnabled;
-    }
-
-    public void setRemoteStoreEnabled(boolean isRemoteStoreEnabled) {
-        this.isRemoteStoreEnabled = isRemoteStoreEnabled;
-    }
-
-    public void setRemoteStoreRepository(String remoteStoreRepository) {
-        this.remoteStoreRepository = remoteStoreRepository;
-    }
-
-    public void setRemoteStoreTranslogRepository(String remoteStoreTranslogRepository) {
-        this.remoteStoreTranslogRepository = remoteStoreTranslogRepository;
     }
 }

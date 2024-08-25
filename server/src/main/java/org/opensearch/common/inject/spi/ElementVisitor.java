@@ -29,7 +29,6 @@
 
 package org.opensearch.common.inject.spi;
 
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.inject.Binding;
 
 /**
@@ -39,9 +38,8 @@ import org.opensearch.common.inject.Binding;
  *            {@code return null} if no return type is needed.
  * @since 2.0
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public interface ElementVisitor<V> {
 
     /**

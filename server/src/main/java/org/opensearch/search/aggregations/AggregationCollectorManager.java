@@ -15,9 +15,9 @@ import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.ReduceableSearchResult;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Common {@link CollectorManager} used by both concurrent and non-concurrent aggregation path and also for global and non-global
@@ -56,11 +56,24 @@ public abstract class AggregationCollectorManager implements CollectorManager<Co
 
     @Override
     public ReduceableSearchResult reduce(Collection<Collector> collectors) throws IOException {
-        final List<InternalAggregation> internals = context.bucketCollectorProcessor().toInternalAggregations(collectors);
-        assert internals.stream().noneMatch(Objects::isNull);
+        final List<Aggregator> aggregators = context.bucketCollectorProcessor().toAggregators(collectors);
+        final List<InternalAggregation> internals = new ArrayList<>(aggregators.size());
         context.aggregations().resetBucketMultiConsumer();
+        for (Aggregator aggregator : aggregators) {
+            try {
+                // post collection is called in ContextIndexSearcher after search on leaves are completed
+                internals.add(aggregator.buildTopLevel());
+            } catch (IOException e) {
+                throw new AggregationExecutionException("Failed to build aggregation [" + aggregator.name() + "]", e);
+            }
+        }
 
-        final InternalAggregations internalAggregations = InternalAggregations.from(internals);
+        // PipelineTreeSource is serialized to the coordinators on older OpenSearch versions for bwc but is deprecated in latest release
+        // To handle that we need to add it in the InternalAggregations object sent in QuerySearchResult.
+        final InternalAggregations internalAggregations = new InternalAggregations(
+            internals,
+            context.request().source().aggregations()::buildPipelineTree
+        );
         return buildAggregationResult(internalAggregations);
     }
 

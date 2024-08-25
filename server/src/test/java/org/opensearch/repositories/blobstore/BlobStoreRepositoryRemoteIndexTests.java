@@ -70,7 +70,6 @@ import static org.hamcrest.Matchers.equalTo;
  * Tests for the {@link BlobStoreRepository} and its subclasses.
  */
 public class BlobStoreRepositoryRemoteIndexTests extends BlobStoreRepositoryHelperTests {
-
     @Override
     protected Settings nodeSettings() {
         Path tempDir = createTempDir();

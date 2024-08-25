@@ -1,0 +1,5 @@
+nodes:
+  # Cyb3rhq indexer server nodes
+  indexer:
+    - name: demo.indexer
+      ip: demo.indexer

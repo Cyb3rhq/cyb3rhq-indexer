@@ -29,7 +29,6 @@
 
 package org.opensearch.common.inject.spi;
 
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.inject.Binding;
 
 import java.util.Set;
@@ -40,9 +39,8 @@ import java.util.Set;
  * @author jessewilson@google.com (Jesse Wilson)
  * @since 2.0
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public interface InstanceBinding<T> extends Binding<T>, HasDependencies {
 
     /**

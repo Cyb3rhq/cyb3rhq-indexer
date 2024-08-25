@@ -36,9 +36,9 @@ import org.opensearch.common.ValidationException;
 import org.opensearch.common.annotation.PublicApi;
 
 /**
- * Base exception for an action request validation extendable by plugins
+ * Base exception for an action request validation
  *
- * @opensearch.api
+ * @opensearch.internal
  */
 @PublicApi(since = "1.0.0")
 public class ActionRequestValidationException extends ValidationException {}

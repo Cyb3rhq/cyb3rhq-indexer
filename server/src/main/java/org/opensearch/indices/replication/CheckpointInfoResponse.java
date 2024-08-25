@@ -40,12 +40,6 @@ public class CheckpointInfoResponse extends TransportResponse {
         this.infosBytes = infosBytes;
     }
 
-    public CheckpointInfoResponse(final ReplicationCheckpoint checkpoint, final byte[] infosBytes) {
-        this.checkpoint = checkpoint;
-        this.infosBytes = infosBytes;
-        this.metadataMap = checkpoint.getMetadataMap();
-    }
-
     public CheckpointInfoResponse(StreamInput in) throws IOException {
         this.checkpoint = new ReplicationCheckpoint(in);
         this.metadataMap = in.readMap(StreamInput::readString, StoreFileMetadata::new);

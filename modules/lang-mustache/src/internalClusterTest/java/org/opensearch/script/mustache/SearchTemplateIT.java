@@ -62,7 +62,7 @@ public class SearchTemplateIT extends OpenSearchSingleNodeTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Collections.singleton(MustacheModulePlugin.class);
+        return Collections.singleton(MustachePlugin.class);
     }
 
     @Before

@@ -84,10 +84,8 @@ public final class OpenSearchDirectoryReader extends FilterDirectoryReader {
 
     /**
      * Wraps existing IndexReader cache helper which internally provides a way to wrap CacheKey.
-     *
-     * @opensearch.api
+     * @opensearch.internal
      */
-    @PublicApi(since = "2.13.0")
     public class DelegatingCacheHelper implements CacheHelper {
         private final CacheHelper cacheHelper;
         private final DelegatingCacheKey serializableCacheKey;
@@ -115,10 +113,7 @@ public final class OpenSearchDirectoryReader extends FilterDirectoryReader {
     /**
      *  Wraps internal IndexReader.CacheKey and attaches a uniqueId to it which can be eventually be used instead of
      *  object itself for serialization purposes.
-     *
-     *  @opensearch.api
      */
-    @PublicApi(since = "2.13.0")
     public class DelegatingCacheKey {
         private final CacheKey cacheKey;
         private final String uniqueId;

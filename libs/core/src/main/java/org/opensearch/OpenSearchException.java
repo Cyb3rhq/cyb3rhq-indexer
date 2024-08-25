@@ -33,7 +33,6 @@ package org.opensearch;
 
 import org.opensearch.common.CheckedFunction;
 import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.Strings;
@@ -70,9 +69,8 @@ import static org.opensearch.core.xcontent.XContentParserUtils.ensureFieldName;
 /**
  * A core library base class for all opensearch exceptions.
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public class OpenSearchException extends RuntimeException implements Writeable, ToXContentFragment {
 
     protected static final Version UNKNOWN_VERSION_ADDED = Version.fromId(0);

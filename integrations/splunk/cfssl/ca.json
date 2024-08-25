@@ -1,0 +1,15 @@
+{
+  "CN": "Cyb3rhq",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+  {
+    "C": "US",
+    "L": "San Francisco",
+    "O": "Cyb3rhq",
+    "OU": "Cyb3rhq Root CA"
+  }
+ ]
+}

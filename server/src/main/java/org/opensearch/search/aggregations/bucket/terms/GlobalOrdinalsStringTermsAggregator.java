@@ -45,7 +45,6 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.PriorityQueue;
-import org.opensearch.common.SetOnce;
 import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.lease.Releasables;
 import org.opensearch.common.util.LongArray;
@@ -95,8 +94,8 @@ public class GlobalOrdinalsStringTermsAggregator extends AbstractStringTermsAggr
     private final long valueCount;
     private final String fieldName;
     private Weight weight;
+    private final GlobalOrdLookupFunction lookupGlobalOrd;
     protected final CollectionStrategy collectionStrategy;
-    private final SetOnce<SortedSetDocValues> dvs = new SetOnce<>();
     protected int segmentsWithSingleValuedOrds = 0;
     protected int segmentsWithMultiValuedOrds = 0;
 
@@ -130,10 +129,11 @@ public class GlobalOrdinalsStringTermsAggregator extends AbstractStringTermsAggr
         this.resultStrategy = resultStrategy.apply(this); // ResultStrategy needs a reference to the Aggregator to do its job.
         this.valuesSource = valuesSource;
         final IndexReader reader = context.searcher().getIndexReader();
-        final SortedSetDocValues values = !reader.leaves().isEmpty()
+        final SortedSetDocValues values = reader.leaves().size() > 0
             ? valuesSource.globalOrdinalsValues(context.searcher().getIndexReader().leaves().get(0))
             : DocValues.emptySortedSet();
         this.valueCount = values.getValueCount();
+        this.lookupGlobalOrd = values::lookupOrd;
         this.acceptedGlobalOrdinals = includeExclude == null ? ALWAYS_TRUE : includeExclude.acceptedGlobalOrdinals(values)::get;
         if (remapGlobalOrds) {
             this.collectionStrategy = new RemapGlobalOrds(cardinality);
@@ -885,10 +885,7 @@ public class GlobalOrdinalsStringTermsAggregator extends AbstractStringTermsAggr
         }
 
         StringTerms.Bucket convertTempBucketToRealBucket(OrdBucket temp) throws IOException {
-            // Recreate DocValues as needed for concurrent segment search
-            SortedSetDocValues values = getDocValues();
-            BytesRef term = BytesRef.deepCopyOf(values.lookupOrd(temp.globalOrd));
-
+            BytesRef term = BytesRef.deepCopyOf(lookupGlobalOrd.apply(temp.globalOrd));
             StringTerms.Bucket result = new StringTerms.Bucket(term, temp.docCount, null, showTermDocCountError, 0, format);
             result.bucketOrd = temp.bucketOrd;
             result.docCountError = 0;
@@ -1004,9 +1001,7 @@ public class GlobalOrdinalsStringTermsAggregator extends AbstractStringTermsAggr
             long subsetSize = subsetSize(owningBucketOrd);
             return (spare, globalOrd, bucketOrd, docCount) -> {
                 spare.bucketOrd = bucketOrd;
-                // Recreate DocValues as needed for concurrent segment search
-                SortedSetDocValues values = getDocValues();
-                oversizedCopy(values.lookupOrd(globalOrd), spare.termBytes);
+                oversizedCopy(lookupGlobalOrd.apply(globalOrd), spare.termBytes);
                 spare.subsetDf = docCount;
                 spare.subsetSize = subsetSize;
                 spare.supersetDf = backgroundFrequencies.freq(spare.termBytes);
@@ -1091,18 +1086,4 @@ public class GlobalOrdinalsStringTermsAggregator extends AbstractStringTermsAggr
      * Predicate used for {@link #acceptedGlobalOrdinals} if there is no filter.
      */
     private static final LongPredicate ALWAYS_TRUE = l -> true;
-
-    /**
-     * If DocValues have not been initialized yet for reduce phase, create and set them.
-     */
-    private SortedSetDocValues getDocValues() throws IOException {
-        if (dvs.get() == null) {
-            dvs.set(
-                !context.searcher().getIndexReader().leaves().isEmpty()
-                    ? valuesSource.globalOrdinalsValues(context.searcher().getIndexReader().leaves().get(0))
-                    : DocValues.emptySortedSet()
-            );
-        }
-        return dvs.get();
-    }
 }

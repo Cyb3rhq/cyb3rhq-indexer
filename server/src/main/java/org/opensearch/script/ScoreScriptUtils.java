@@ -45,7 +45,6 @@ import org.opensearch.index.fielddata.ScriptDocValues;
 import org.opensearch.index.mapper.DateFieldMapper;
 
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 
 import static org.opensearch.common.util.BitMixer.mix32;
 import static org.opensearch.index.query.functionscore.TermFrequencyFunctionFactory.TermFrequencyFunctionName.SUM_TOTAL_TERM_FREQ;
@@ -371,7 +370,7 @@ public final class ScoreScriptUtils {
             this.scaling = scale / (1.0 - decay);
         }
 
-        public double decayDateLinear(ZonedDateTime docValueDate) {
+        public double decayDateLinear(JodaCompatibleZonedDateTime docValueDate) {
             long docValue = docValueDate.toInstant().toEpochMilli();
             // as java.lang.Math#abs(long) is a forbidden API, have to use this comparison instead
             long diff = (docValue >= origin) ? (docValue - origin) : (origin - docValue);
@@ -399,7 +398,7 @@ public final class ScoreScriptUtils {
             this.scaling = Math.log(decay) / scale;
         }
 
-        public double decayDateExp(ZonedDateTime docValueDate) {
+        public double decayDateExp(JodaCompatibleZonedDateTime docValueDate) {
             long docValue = docValueDate.toInstant().toEpochMilli();
             long diff = (docValue >= origin) ? (docValue - origin) : (origin - docValue);
             long distance = Math.max(0, diff - offset);
@@ -426,7 +425,7 @@ public final class ScoreScriptUtils {
             this.scaling = 0.5 * Math.pow(scale, 2.0) / Math.log(decay);
         }
 
-        public double decayDateGauss(ZonedDateTime docValueDate) {
+        public double decayDateGauss(JodaCompatibleZonedDateTime docValueDate) {
             long docValue = docValueDate.toInstant().toEpochMilli();
             long diff = (docValue >= origin) ? (docValue - origin) : (origin - docValue);
             long distance = Math.max(0, diff - offset);

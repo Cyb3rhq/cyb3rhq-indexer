@@ -29,7 +29,6 @@
 
 package org.opensearch.common.inject;
 
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.inject.internal.Annotations;
 import org.opensearch.common.inject.internal.MoreTypes;
 import org.opensearch.common.inject.internal.ToStringBuilder;
@@ -60,9 +59,8 @@ import java.util.Objects;
  *
  * @author crazybob@google.com (Bob Lee)
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public class Key<T> {
 
     private final AnnotationStrategy annotationStrategy;

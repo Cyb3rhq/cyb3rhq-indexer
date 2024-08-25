@@ -41,7 +41,6 @@ import org.opensearch.action.search.SearchTransportService;
 import org.opensearch.cluster.routing.WeightedRoutingStats;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.Nullable;
-import org.opensearch.common.cache.service.CacheService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.settings.SettingsFilter;
 import org.opensearch.common.util.io.IOUtils;
@@ -100,7 +99,6 @@ public class NodeService implements Closeable {
     private final RepositoriesService repositoriesService;
     private final AdmissionControlService admissionControlService;
     private final SegmentReplicationStatsTracker segmentReplicationStatsTracker;
-    private final CacheService cacheService;
 
     NodeService(
         Settings settings,
@@ -127,8 +125,7 @@ public class NodeService implements Closeable {
         ResourceUsageCollectorService resourceUsageCollectorService,
         SegmentReplicationStatsTracker segmentReplicationStatsTracker,
         RepositoriesService repositoriesService,
-        AdmissionControlService admissionControlService,
-        CacheService cacheService
+        AdmissionControlService admissionControlService
     ) {
         this.settings = settings;
         this.threadPool = threadPool;
@@ -157,7 +154,6 @@ public class NodeService implements Closeable {
         clusterService.addStateApplier(ingestService);
         clusterService.addStateApplier(searchPipelineService);
         this.segmentReplicationStatsTracker = segmentReplicationStatsTracker;
-        this.cacheService = cacheService;
     }
 
     public NodeInfo info(
@@ -240,8 +236,7 @@ public class NodeService implements Closeable {
         boolean resourceUsageStats,
         boolean segmentReplicationTrackerStats,
         boolean repositoriesStats,
-        boolean admissionControl,
-        boolean cacheService
+        boolean admissionControl
     ) {
         // for indices stats we want to include previous allocated shards stats as well (it will
         // only be applied to the sensible ones to use, like refresh/merge/flush/indexing stats)
@@ -273,8 +268,7 @@ public class NodeService implements Closeable {
             searchPipelineStats ? this.searchPipelineService.stats() : null,
             segmentReplicationTrackerStats ? this.segmentReplicationStatsTracker.getTotalRejectionStats() : null,
             repositoriesStats ? this.repositoriesService.getRepositoriesStats() : null,
-            admissionControl ? this.admissionControlService.stats() : null,
-            cacheService ? this.cacheService.stats(indices) : null
+            admissionControl ? this.admissionControlService.stats() : null
         );
     }
 

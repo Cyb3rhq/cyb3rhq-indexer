@@ -106,16 +106,6 @@ grant codeBase "${codebase.opensearch-rest-client}" {
   permission java.net.NetPermission "getProxySelector";
 };
 
-grant codeBase "${codebase.httpcore5}" {
-  // httpcore makes socket connections for rest tests
-  permission java.net.SocketPermission "*", "connect";
-};
-
-grant codeBase "${codebase.httpclient5}" {
-  // httpclient5 makes socket connections for rest tests
-  permission java.net.SocketPermission "*", "connect";
-};
-
 grant codeBase "${codebase.httpcore-nio}" {
   // httpcore makes socket connections for rest tests
   permission java.net.SocketPermission "*", "connect";
@@ -157,7 +147,4 @@ grant {
   permission java.lang.RuntimePermission "reflectionFactoryAccess";
   permission java.lang.RuntimePermission "accessClassInPackage.sun.reflect";
   permission java.lang.reflect.ReflectPermission "suppressAccessChecks";
-  permission org.opensearch.secure_sm.ThreadContextPermission "markAsSystemContext";
-  permission org.opensearch.secure_sm.ThreadContextPermission "stashAndMergeHeaders";
-  permission org.opensearch.secure_sm.ThreadContextPermission "stashWithOrigin";
 };

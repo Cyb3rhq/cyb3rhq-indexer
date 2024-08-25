@@ -33,6 +33,7 @@
 package org.opensearch.transport;
 
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.cluster.ClusterName;
 import org.opensearch.cluster.node.DiscoveryNode;
@@ -309,7 +310,7 @@ public class ProxyConnectionStrategy extends RemoteConnectionStrategy {
 
                     @Override
                     public void onFailure(Exception e) {
-                        logger.error(
+                        logger.debug(
                             new ParameterizedMessage(
                                 "failed to open remote connection [remote cluster: {}, address: {}]",
                                 clusterAlias,
@@ -364,7 +365,11 @@ public class ProxyConnectionStrategy extends RemoteConnectionStrategy {
 
         private ProxyModeInfo(StreamInput input) throws IOException {
             address = input.readString();
-            serverName = input.readString();
+            if (input.getVersion().onOrAfter(LegacyESVersion.V_7_7_0)) {
+                serverName = input.readString();
+            } else {
+                serverName = null;
+            }
             maxSocketConnections = input.readVInt();
             numSocketsConnected = input.readVInt();
         }
@@ -381,7 +386,9 @@ public class ProxyConnectionStrategy extends RemoteConnectionStrategy {
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             out.writeString(address);
-            out.writeString(serverName);
+            if (out.getVersion().onOrAfter(LegacyESVersion.V_7_7_0)) {
+                out.writeString(serverName);
+            }
             out.writeVInt(maxSocketConnections);
             out.writeVInt(numSocketsConnected);
         }

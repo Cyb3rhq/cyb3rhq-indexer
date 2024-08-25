@@ -312,12 +312,6 @@ import org.opensearch.action.admin.indices.validate.query.ValidateQueryAction;
 import org.opensearch.action.admin.indices.validate.query.ValidateQueryRequest;
 import org.opensearch.action.admin.indices.validate.query.ValidateQueryRequestBuilder;
 import org.opensearch.action.admin.indices.validate.query.ValidateQueryResponse;
-import org.opensearch.action.admin.indices.view.CreateViewAction;
-import org.opensearch.action.admin.indices.view.DeleteViewAction;
-import org.opensearch.action.admin.indices.view.GetViewAction;
-import org.opensearch.action.admin.indices.view.ListViewNamesAction;
-import org.opensearch.action.admin.indices.view.SearchViewAction;
-import org.opensearch.action.admin.indices.view.UpdateViewAction;
 import org.opensearch.action.bulk.BulkAction;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.bulk.BulkRequestBuilder;
@@ -416,7 +410,6 @@ import org.opensearch.common.Nullable;
 import org.opensearch.common.action.ActionFuture;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.common.util.concurrent.ThreadContextAccess;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.action.ActionResponse;
 import org.opensearch.core.common.bytes.BytesReference;
@@ -747,26 +740,6 @@ public abstract class AbstractClient implements Client {
     @Override
     public FieldCapabilitiesRequestBuilder prepareFieldCaps(String... indices) {
         return new FieldCapabilitiesRequestBuilder(this, FieldCapabilitiesAction.INSTANCE, indices);
-    }
-
-    @Override
-    public void searchView(final SearchViewAction.Request request, final ActionListener<SearchResponse> listener) {
-        execute(SearchViewAction.INSTANCE, request);
-    }
-
-    @Override
-    public ActionFuture<SearchResponse> searchView(final SearchViewAction.Request request) {
-        return execute(SearchViewAction.INSTANCE, request);
-    }
-
-    @Override
-    public void listViewNames(final ListViewNamesAction.Request request, ActionListener<ListViewNamesAction.Response> listener) {
-        execute(ListViewNamesAction.INSTANCE, request, listener);
-    }
-
-    @Override
-    public ActionFuture<ListViewNamesAction.Response> listViewNames(final ListViewNamesAction.Request request) {
-        return execute(ListViewNamesAction.INSTANCE, request);
     }
 
     static class Admin implements AdminClient {
@@ -2097,46 +2070,6 @@ public abstract class AbstractClient implements Client {
         public ActionFuture<ResolveIndexAction.Response> resolveIndex(ResolveIndexAction.Request request) {
             return execute(ResolveIndexAction.INSTANCE, request);
         }
-
-        @Override
-        public void createView(CreateViewAction.Request request, ActionListener<GetViewAction.Response> listener) {
-            execute(CreateViewAction.INSTANCE, request);
-        }
-
-        @Override
-        public ActionFuture<GetViewAction.Response> createView(CreateViewAction.Request request) {
-            return execute(CreateViewAction.INSTANCE, request);
-        }
-
-        /** Gets a view */
-        public void getView(GetViewAction.Request request, ActionListener<GetViewAction.Response> listener) {
-            execute(GetViewAction.INSTANCE, request, listener);
-        }
-
-        /** Gets a view */
-        public ActionFuture<GetViewAction.Response> getView(GetViewAction.Request request) {
-            return execute(GetViewAction.INSTANCE, request);
-        }
-
-        /** Create a view */
-        public void deleteView(DeleteViewAction.Request request, ActionListener<AcknowledgedResponse> listener) {
-            execute(DeleteViewAction.INSTANCE, request, listener);
-        }
-
-        /** Create a view */
-        public ActionFuture<AcknowledgedResponse> deleteView(DeleteViewAction.Request request) {
-            return execute(DeleteViewAction.INSTANCE, request);
-        }
-
-        /** Create a view */
-        public void updateView(CreateViewAction.Request request, ActionListener<GetViewAction.Response> listener) {
-            execute(UpdateViewAction.INSTANCE, request, listener);
-        }
-
-        /** Create a view */
-        public ActionFuture<GetViewAction.Response> updateView(CreateViewAction.Request request) {
-            return execute(UpdateViewAction.INSTANCE, request);
-        }
     }
 
     @Override
@@ -2149,9 +2082,7 @@ public abstract class AbstractClient implements Client {
                 ActionListener<Response> listener
             ) {
                 ThreadContext threadContext = threadPool().getThreadContext();
-                try (
-                    ThreadContext.StoredContext ctx = ThreadContextAccess.doPrivileged(() -> threadContext.stashAndMergeHeaders(headers))
-                ) {
+                try (ThreadContext.StoredContext ctx = threadContext.stashAndMergeHeaders(headers)) {
                     super.doExecute(action, request, listener);
                 }
             }

@@ -38,7 +38,6 @@ import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.opensearch.action.support.ContextPreservingActionListener;
 import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
@@ -76,13 +75,7 @@ import java.util.stream.Stream;
  */
 public abstract class RemoteConnectionStrategy implements TransportConnectionListener, Closeable {
 
-    /**
-     * Strategy to connect to remote nodes
-     *
-    * @opensearch.api
-    */
-    @PublicApi(since = "1.0.0")
-    public enum ConnectionStrategy {
+    enum ConnectionStrategy {
         SNIFF(
             SniffConnectionStrategy.CHANNELS_PER_CONNECTION,
             SniffConnectionStrategy::enablementSettings,

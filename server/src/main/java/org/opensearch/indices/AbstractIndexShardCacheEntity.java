@@ -32,7 +32,6 @@
 
 package org.opensearch.indices;
 
-import org.opensearch.common.cache.ICacheKey;
 import org.opensearch.common.cache.RemovalNotification;
 import org.opensearch.common.cache.RemovalReason;
 import org.opensearch.core.common.bytes.BytesReference;
@@ -52,8 +51,8 @@ abstract class AbstractIndexShardCacheEntity implements IndicesRequestCache.Cach
     protected abstract ShardRequestCache stats();
 
     @Override
-    public final void onCached(ICacheKey<IndicesRequestCache.Key> key, BytesReference value) {
-        stats().onCached(getRamBytesUsedInKey(key), value);
+    public final void onCached(IndicesRequestCache.Key key, BytesReference value) {
+        stats().onCached(key, value);
     }
 
     @Override
@@ -67,19 +66,7 @@ abstract class AbstractIndexShardCacheEntity implements IndicesRequestCache.Cach
     }
 
     @Override
-    public final void onRemoval(RemovalNotification<ICacheKey<IndicesRequestCache.Key>, BytesReference> notification) {
-        stats().onRemoval(
-            getRamBytesUsedInKey(notification.getKey()),
-            notification.getValue(),
-            notification.getRemovalReason() == RemovalReason.EVICTED
-        );
-    }
-
-    private long getRamBytesUsedInKey(ICacheKey<IndicesRequestCache.Key> key) {
-        long innerKeyRamBytesUsed = 0;
-        if (key.key != null) {
-            innerKeyRamBytesUsed = key.key.ramBytesUsed();
-        }
-        return key.ramBytesUsed(innerKeyRamBytesUsed);
+    public final void onRemoval(RemovalNotification<IndicesRequestCache.Key, BytesReference> notification) {
+        stats().onRemoval(notification.getKey(), notification.getValue(), notification.getRemovalReason() == RemovalReason.EVICTED);
     }
 }

@@ -54,11 +54,11 @@ public class DistributionDownloadPluginTests extends GradleUnitTestCase {
     private static Project packagesProject;
     private static Project bwcProject;
 
-    private static final Version BWC_MAJOR_VERSION = Version.fromString("6.0.0");
-    private static final Version BWC_MINOR_VERSION = Version.fromString("5.1.0");
-    private static final Version BWC_STAGED_VERSION = Version.fromString("5.0.0");
-    private static final Version BWC_BUGFIX_VERSION = Version.fromString("5.0.1");
-    private static final Version BWC_MAINTENANCE_VERSION = Version.fromString("4.90.1");
+    private static final Version BWC_MAJOR_VERSION = Version.fromString("5.0.0");
+    private static final Version BWC_MINOR_VERSION = Version.fromString("4.1.0");
+    private static final Version BWC_STAGED_VERSION = Version.fromString("4.0.0");
+    private static final Version BWC_BUGFIX_VERSION = Version.fromString("4.0.1");
+    private static final Version BWC_MAINTENANCE_VERSION = Version.fromString("3.90.1");
     private static final BwcVersions BWC_MINOR = new BwcVersions(
         new TreeSet<>(Arrays.asList(BWC_BUGFIX_VERSION, BWC_MINOR_VERSION, BWC_MAJOR_VERSION)),
         BWC_MAJOR_VERSION
@@ -94,7 +94,7 @@ public class DistributionDownloadPluginTests extends GradleUnitTestCase {
         project.getExtensions().getExtraProperties().set("customDistributionUrl", customUrl);
         DistributionDownloadPlugin plugin = new DistributionDownloadPlugin();
         plugin.apply(project);
-        assertEquals(2, project.getRepositories().size());
+        assertEquals(4, project.getRepositories().size());
         assertEquals(
             ((DefaultIvyArtifactRepository) project.getRepositories().getAt("opensearch-downloads")).getUrl().toString(),
             customUrl
@@ -103,13 +103,22 @@ public class DistributionDownloadPluginTests extends GradleUnitTestCase {
             ((DefaultIvyArtifactRepository) project.getRepositories().getAt("opensearch-snapshots")).getUrl().toString(),
             customUrl
         );
+        assertEquals(
+            ((DefaultIvyArtifactRepository) project.getRepositories().getAt("elasticsearch-downloads")).getUrl().toString(),
+            "https://artifacts-no-kpi.elastic.co"
+        );
+        assertEquals(
+            ((DefaultIvyArtifactRepository) project.getRepositories().getAt("elasticsearch-snapshots")).getUrl().toString(),
+            "https://snapshots-no-kpi.elastic.co"
+        );
+
     }
 
     public void testCustomDistributionUrlWithoutUrl() {
         Project project = ProjectBuilder.builder().build();
         DistributionDownloadPlugin plugin = new DistributionDownloadPlugin();
         plugin.apply(project);
-        assertEquals(3, project.getRepositories().size());
+        assertEquals(5, project.getRepositories().size());
         assertEquals(
             ((DefaultIvyArtifactRepository) project.getRepositories().getAt("opensearch-downloads")).getUrl().toString(),
             "https://artifacts.opensearch.org"
@@ -121,6 +130,14 @@ public class DistributionDownloadPluginTests extends GradleUnitTestCase {
         assertEquals(
             ((DefaultIvyArtifactRepository) project.getRepositories().getAt("opensearch-snapshots")).getUrl().toString(),
             "https://artifacts.opensearch.org"
+        );
+        assertEquals(
+            ((DefaultIvyArtifactRepository) project.getRepositories().getAt("elasticsearch-downloads")).getUrl().toString(),
+            "https://artifacts-no-kpi.elastic.co"
+        );
+        assertEquals(
+            ((DefaultIvyArtifactRepository) project.getRepositories().getAt("elasticsearch-snapshots")).getUrl().toString(),
+            "https://snapshots-no-kpi.elastic.co"
         );
     }
 

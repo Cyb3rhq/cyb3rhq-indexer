@@ -61,7 +61,6 @@ import org.opensearch.indices.replication.common.ReplicationFailedException;
 import org.opensearch.indices.replication.common.ReplicationListener;
 import org.opensearch.indices.replication.common.ReplicationLuceneIndex;
 import org.opensearch.indices.replication.common.ReplicationTarget;
-import org.opensearch.threadpool.ThreadPool;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -88,20 +87,16 @@ public class RecoveryTarget extends ReplicationTarget implements RecoveryTargetH
     // latch that can be used to blockingly wait for RecoveryTarget to be closed
     private final CountDownLatch closedLatch = new CountDownLatch(1);
 
-    private final ThreadPool threadPool;
-
     /**
      * Creates a new recovery target object that represents a recovery to the provided shard.
      *
-     * @param indexShard local shard where we want to recover to
-     * @param sourceNode source node of the recovery where we recover from
-     * @param listener   called when recovery is completed/failed
-     * @param threadPool threadpool instance
+     * @param indexShard                        local shard where we want to recover to
+     * @param sourceNode                        source node of the recovery where we recover from
+     * @param listener                          called when recovery is completed/failed
      */
-    public RecoveryTarget(IndexShard indexShard, DiscoveryNode sourceNode, ReplicationListener listener, ThreadPool threadPool) {
+    public RecoveryTarget(IndexShard indexShard, DiscoveryNode sourceNode, ReplicationListener listener) {
         super("recovery_status", indexShard, indexShard.recoveryState().getIndex(), listener);
         this.sourceNode = sourceNode;
-        this.threadPool = threadPool;
         indexShard.recoveryStats().incCurrentAsTarget();
         final String tempFilePrefix = getPrefix() + UUIDs.randomBase64UUID() + ".";
         this.multiFileWriter = new MultiFileWriter(indexShard.store(), stateIndex, tempFilePrefix, logger, this::ensureRefCount);
@@ -113,7 +108,7 @@ public class RecoveryTarget extends ReplicationTarget implements RecoveryTargetH
      * @return a copy of this recovery target
      */
     public RecoveryTarget retryCopy() {
-        return new RecoveryTarget(indexShard, sourceNode, listener, threadPool);
+        return new RecoveryTarget(indexShard, sourceNode, listener);
     }
 
     public String source() {
@@ -179,6 +174,51 @@ public class RecoveryTarget extends ReplicationTarget implements RecoveryTargetH
         return false;
     }
 
+    /**
+     * cancel the recovery. calling this method will clean temporary files and release the store
+     * unless this object is in use (in which case it will be cleaned once all ongoing users call
+     * {@link #decRef()}
+     * <p>
+     * if {@link #cancellableThreads()} was used, the threads will be interrupted.
+     */
+    public void cancel(String reason) {
+        if (finished.compareAndSet(false, true)) {
+            try {
+                logger.debug("recovery canceled (reason: [{}])", reason);
+                cancellableThreads.cancel(reason);
+            } finally {
+                // release the initial reference. recovery files will be cleaned as soon as ref count goes to zero, potentially now
+                decRef();
+            }
+        }
+    }
+
+    /**
+     * fail the recovery and call listener
+     *
+     * @param e                exception that encapsulating the failure
+     * @param sendShardFailure indicates whether to notify the cluster-manager of the shard failure
+     */
+    public void fail(RecoveryFailedException e, boolean sendShardFailure) {
+        super.fail(e, sendShardFailure);
+    }
+
+    /** mark the current recovery as done */
+    public void markAsDone() {
+        if (finished.compareAndSet(false, true)) {
+            assert multiFileWriter.tempFileNames.isEmpty() : "not all temporary files are renamed";
+            try {
+                // this might still throw an exception ie. if the shard is CLOSED due to some other event.
+                // it's safer to decrement the reference in a try finally here.
+                indexShard.postRecovery("peer recovery done");
+            } finally {
+                // release the initial reference. recovery files will be cleaned as soon as ref count goes to zero, potentially now
+                decRef();
+            }
+            listener.onDone(state());
+        }
+    }
+
     @Override
     protected void closeInternal() {
         try {
@@ -203,6 +243,8 @@ public class RecoveryTarget extends ReplicationTarget implements RecoveryTargetH
     @Override
     protected void onDone() {
         assert multiFileWriter.tempFileNames.isEmpty() : "not all temporary files are renamed";
+        // this might still throw an exception ie. if the shard is CLOSED due to some other event.
+        // it's safer to decrement the reference in a try finally here.
         indexShard.postRecovery("peer recovery done");
     }
 
@@ -213,23 +255,7 @@ public class RecoveryTarget extends ReplicationTarget implements RecoveryTargetH
         ActionListener.completeWith(listener, () -> {
             state().getIndex().setFileDetailsComplete(); // ops-based recoveries don't send the file details
             state().getTranslog().totalOperations(totalTranslogOps);
-            // Cleanup remote contents before opening new translog.
-            // This prevents reading from any old Translog UUIDs during re-seeding
-            // (situation in which primary fails over to docrep replica and is re-seeded to remote again)
-            // which might end up causing a TranslogCorruptedException
-            if (indexShard.shouldSeedRemoteStore()) {
-                assert indexShard.routingEntry().primary() : "Remote seeding should only true be for primary shard copy";
-                indexShard.deleteRemoteStoreContents();
-            }
             indexShard().openEngineAndSkipTranslogRecovery();
-            // upload to remote store in migration for primary shard
-            if (indexShard.shouldSeedRemoteStore()) {
-                // This cleans up remote translog's 0 generation, as we don't want to get that uploaded
-                indexShard.sync();
-                threadPool.executor(ThreadPool.Names.GENERIC).execute(() -> { indexShard.refresh("remote store migration"); });
-                indexShard.waitForRemoteStoreSync(this::setLastAccessTime);
-                logger.info("Remote Store is now seeded for {}", indexShard.shardId());
-            }
             return null;
         });
     }
@@ -381,7 +407,7 @@ public class RecoveryTarget extends ReplicationTarget implements RecoveryTargetH
                 // Replicas for segment replication or remote snapshot indices do not create
                 // their own commit points and therefore do not modify the commit user data
                 // in their store. In these cases, reuse the primary's translog UUID.
-                final boolean reuseTranslogUUID = indexShard.indexSettings().isSegRepEnabledOrRemoteNode()
+                final boolean reuseTranslogUUID = indexShard.indexSettings().isSegRepEnabled()
                     || indexShard.indexSettings().isRemoteSnapshot();
                 if (reuseTranslogUUID) {
                     final String translogUUID = store.getMetadata().getCommitUserData().get(TRANSLOG_UUID_KEY);

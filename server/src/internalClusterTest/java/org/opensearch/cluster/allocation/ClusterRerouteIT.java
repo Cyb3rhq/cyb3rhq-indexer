@@ -273,8 +273,7 @@ public class ClusterRerouteIT extends OpenSearchIntegTestCase {
         internalCluster().stopRandomNode(InternalTestCluster.nameFilter(node_1));
 
         // This might run slowly on older hardware
-        // In some case, the shards will be rebalanced back and forth, it seems like a very low probability bug.
-        ensureGreen(TimeValue.timeValueMinutes(2), false);
+        ensureGreen(TimeValue.timeValueMinutes(2));
     }
 
     private void rerouteWithAllocateLocalGateway(Settings commonSettings) throws Exception {

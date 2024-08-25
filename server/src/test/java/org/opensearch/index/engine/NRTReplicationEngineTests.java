@@ -116,10 +116,7 @@ public class NRTReplicationEngineTests extends EngineTestCase {
                 applyOperation(nrtEngine, op);
             }
 
-            assertEquals(
-                nrtEngine.translogManager().getTranslogLastWriteLocation(),
-                engine.translogManager().getTranslogLastWriteLocation()
-            );
+            assertEquals(nrtEngine.getTranslogLastWriteLocation(), engine.getTranslogLastWriteLocation());
             assertEquals(nrtEngine.getLastSyncedGlobalCheckpoint(), engine.getLastSyncedGlobalCheckpoint());
 
             // we don't index into nrtEngine, so get the doc ids from the regular engine.
@@ -129,7 +126,7 @@ public class NRTReplicationEngineTests extends EngineTestCase {
             nrtEngine.close();
 
             // recover a new engine from the nrtEngine's xlog.
-            nrtEngine.translogManager().syncTranslog();
+            nrtEngine.syncTranslog();
             try (InternalEngine engine = new InternalEngine(nrtEngine.config())) {
                 TranslogHandler translogHandler = createTranslogHandler(nrtEngine.config().getIndexSettings(), engine);
                 engine.translogManager().recoverFromTranslog(translogHandler, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
@@ -297,8 +294,8 @@ public class NRTReplicationEngineTests extends EngineTestCase {
                     equalTo(seqNos)
                 );
             }
-            nrtEngine.translogManager().rollTranslogGeneration();
-            nrtEngine.translogManager().trimOperationsFromTranslog(primaryTerm.get(), NO_OPS_PERFORMED);
+            nrtEngine.rollTranslogGeneration();
+            nrtEngine.trimOperationsFromTranslog(primaryTerm.get(), NO_OPS_PERFORMED);
             try (Translog.Snapshot snapshot = getTranslog(engine).newSnapshot()) {
                 assertThat(snapshot.totalOperations(), equalTo(0));
                 assertNull(snapshot.next());

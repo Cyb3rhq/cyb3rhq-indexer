@@ -8,17 +8,18 @@
 
 package org.opensearch;
 
+import org.opensearch.crypto.CryptoRegistryException;
+
 import static org.opensearch.OpenSearchException.OpenSearchExceptionHandle;
 import static org.opensearch.OpenSearchException.OpenSearchExceptionHandleRegistry.registerExceptionHandle;
 import static org.opensearch.OpenSearchException.UNKNOWN_VERSION_ADDED;
 import static org.opensearch.Version.V_2_10_0;
-import static org.opensearch.Version.V_2_13_0;
 import static org.opensearch.Version.V_2_1_0;
+import static org.opensearch.Version.V_2_3_0;
 import static org.opensearch.Version.V_2_4_0;
 import static org.opensearch.Version.V_2_5_0;
 import static org.opensearch.Version.V_2_6_0;
 import static org.opensearch.Version.V_2_7_0;
-import static org.opensearch.Version.V_3_0_0;
 
 /**
  * Utility class to register server exceptions
@@ -1110,7 +1111,7 @@ public final class OpenSearchServerException {
                 org.opensearch.index.shard.PrimaryShardClosedException.class,
                 org.opensearch.index.shard.PrimaryShardClosedException::new,
                 162,
-                V_3_0_0
+                V_2_3_0
             )
         );
         registerExceptionHandle(
@@ -1126,7 +1127,7 @@ public final class OpenSearchServerException {
                 org.opensearch.cluster.decommission.NodeDecommissionedException.class,
                 org.opensearch.cluster.decommission.NodeDecommissionedException::new,
                 164,
-                V_3_0_0
+                V_2_4_0
             )
         );
         registerExceptionHandle(
@@ -1177,36 +1178,13 @@ public final class OpenSearchServerException {
                 V_2_7_0
             )
         );
-        registerExceptionHandle(
-            new OpenSearchExceptionHandle(
-                org.opensearch.crypto.CryptoRegistryException.class,
-                org.opensearch.crypto.CryptoRegistryException::new,
-                171,
-                V_2_10_0
-            )
-        );
-        registerExceptionHandle(
-            new OpenSearchExceptionHandle(
-                org.opensearch.action.admin.indices.view.ViewNotFoundException.class,
-                org.opensearch.action.admin.indices.view.ViewNotFoundException::new,
-                172,
-                V_2_13_0
-            )
-        );
-        registerExceptionHandle(
-            new OpenSearchExceptionHandle(
-                org.opensearch.action.admin.indices.view.ViewAlreadyExistsException.class,
-                org.opensearch.action.admin.indices.view.ViewAlreadyExistsException::new,
-                173,
-                V_2_13_0
-            )
-        );
+        registerExceptionHandle(new OpenSearchExceptionHandle(CryptoRegistryException.class, CryptoRegistryException::new, 171, V_2_10_0));
         registerExceptionHandle(
             new OpenSearchExceptionHandle(
                 org.opensearch.cluster.block.IndexCreateBlockException.class,
                 org.opensearch.cluster.block.IndexCreateBlockException::new,
                 CUSTOM_ELASTICSEARCH_EXCEPTIONS_BASE_ID + 1,
-                V_3_0_0
+                V_2_6_0
             )
         );
     }

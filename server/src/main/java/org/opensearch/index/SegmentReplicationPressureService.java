@@ -96,6 +96,7 @@ public class SegmentReplicationPressureService implements Closeable {
 
     private final ThreadPool threadPool;
     private final SegmentReplicationStatsTracker tracker;
+
     private final ShardStateAction shardStateAction;
 
     private volatile AsyncFailStaleReplicaTask failStaleReplicaTask;
@@ -111,6 +112,7 @@ public class SegmentReplicationPressureService implements Closeable {
     ) {
         this.indicesService = indicesService;
         this.tracker = tracker;
+
         this.shardStateAction = shardStateAction;
         this.threadPool = threadPool;
 
@@ -145,9 +147,7 @@ public class SegmentReplicationPressureService implements Closeable {
         final IndexService indexService = indicesService.indexService(shardId.getIndex());
         if (indexService != null) {
             final IndexShard shard = indexService.getShard(shardId.id());
-            if (isSegmentReplicationBackpressureEnabled
-                && shard.indexSettings().isSegRepEnabledOrRemoteNode()
-                && shard.routingEntry().primary()) {
+            if (isSegmentReplicationBackpressureEnabled && shard.indexSettings().isSegRepEnabled() && shard.routingEntry().primary()) {
                 validateReplicationGroup(shard);
             }
         }
@@ -266,8 +266,7 @@ public class SegmentReplicationPressureService implements Closeable {
                             stats.getShardStats().get(shardId).getReplicaStats()
                         );
                         final IndexService indexService = pressureService.indicesService.indexService(shardId.getIndex());
-                        if (indexService.getIndexSettings() != null
-                            && indexService.getIndexSettings().isSegRepEnabledOrRemoteNode() == false) {
+                        if (indexService.getIndexSettings() != null && indexService.getIndexSettings().isSegRepEnabled() == false) {
                             return;
                         }
                         final IndexShard primaryShard = indexService.getShard(shardId.getId());

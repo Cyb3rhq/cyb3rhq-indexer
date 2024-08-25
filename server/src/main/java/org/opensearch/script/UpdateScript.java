@@ -32,7 +32,6 @@
 
 package org.opensearch.script;
 
-import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -54,7 +53,7 @@ public abstract class UpdateScript {
     private final Map<String, Object> ctx;
 
     public UpdateScript(Map<String, Object> params, Map<String, Object> ctx) {
-        this.params = Collections.unmodifiableMap(params);
+        this.params = params;
         this.ctx = ctx;
     }
 

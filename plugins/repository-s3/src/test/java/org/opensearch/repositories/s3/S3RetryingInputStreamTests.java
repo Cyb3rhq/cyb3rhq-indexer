@@ -43,8 +43,6 @@ import org.opensearch.test.OpenSearchTestCase;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.any;
@@ -61,15 +59,6 @@ public class S3RetryingInputStreamTests extends OpenSearchTestCase {
 
         assertThat(stream.isEof(), is(true));
         assertThat(stream.isAborted(), is(false));
-    }
-
-    public void testInputStreamGetMetadata() throws IOException {
-        final byte[] expectedBytes = randomByteArrayOfLength(randomIntBetween(1, 512));
-
-        final S3RetryingInputStream stream = createInputStream(expectedBytes, 0L, (long) (Integer.MAX_VALUE - 1));
-
-        Map<String, String> metadata = new HashMap<>();
-        assertEquals(stream.getMetadata(), metadata);
     }
 
     public void testInputStreamIsAborted() throws IOException {

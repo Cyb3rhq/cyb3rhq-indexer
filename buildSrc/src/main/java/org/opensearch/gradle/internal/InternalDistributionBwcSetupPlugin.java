@@ -123,7 +123,7 @@ public class InternalDistributionBwcSetupPlugin implements Plugin<Project> {
             String expandedDistConfiguration = "expanded-" + projectName;
             bwcProject.getConfigurations().create(expandedDistConfiguration);
             bwcProject.getArtifacts().add(expandedDistConfiguration, distributionProject.getExpandedDistDirectory(), artifact -> {
-                artifact.setName("opensearch");
+                artifact.setName("cyb3rhq-indexer");
                 artifact.builtBy(buildBwcTask);
                 artifact.setType("directory");
             });
@@ -132,7 +132,7 @@ public class InternalDistributionBwcSetupPlugin implements Plugin<Project> {
 
     private void registerDistributionArchiveArtifact(Project bwcProject, DistributionProject distributionProject, String buildBwcTask) {
         String artifactFileName = distributionProject.getDistFile().getName();
-        String artifactName = "opensearch";
+        String artifactName = "cyb3rhq-indexer";
 
         String suffix = artifactFileName.endsWith("tar.gz") ? "tar.gz" : artifactFileName.substring(artifactFileName.length() - 3);
         int archIndex = artifactFileName.indexOf("x64");
@@ -158,17 +158,7 @@ public class InternalDistributionBwcSetupPlugin implements Plugin<Project> {
         projects.addAll(asList("deb", "rpm"));
 
         if (bwcVersion.onOrAfter("7.0.0")) { // starting with 7.0 we bundle a jdk which means we have platform-specific archives
-            projects.addAll(
-                asList(
-                    "darwin-tar",
-                    "darwin-arm64-tar",
-                    "linux-tar",
-                    "linux-arm64-tar",
-                    "linux-ppc64le-tar",
-                    "linux-s390x-tar",
-                    "windows-zip"
-                )
-            );
+            projects.addAll(asList("darwin-tar", "linux-tar", "windows-zip"));
         } else { // prior to 7.0 we published only a single zip and tar archives
             projects.addAll(asList("zip", "tar"));
         }
@@ -258,12 +248,12 @@ public class InternalDistributionBwcSetupPlugin implements Plugin<Project> {
             if (version.onOrAfter("1.1.0")) {
                 this.distFile = new File(
                     checkoutDir,
-                    baseDir + "/" + name + "/build/distributions/opensearch-min-" + version + "-SNAPSHOT" + classifier + "." + extension
+                    baseDir + "/" + name + "/build/distributions/cyb3rhq-indexer-min-" + version + "-SNAPSHOT" + classifier + "." + extension
                 );
             } else {
                 this.distFile = new File(
                     checkoutDir,
-                    baseDir + "/" + name + "/build/distributions/opensearch-" + version + "-SNAPSHOT" + classifier + "." + extension
+                    baseDir + "/" + name + "/build/distributions/cyb3rhq-indexer-" + version + "-SNAPSHOT" + classifier + "." + extension
                 );
             }
             // we only ported this down to the 7.x branch.

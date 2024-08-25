@@ -33,6 +33,7 @@
 package org.opensearch.cluster.routing.allocation;
 
 import org.opensearch.action.support.replication.ClusterStateCreationUtils;
+import org.opensearch.cluster.ClusterInfo;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.OpenSearchAllocationTestCase;
 import org.opensearch.cluster.node.DiscoveryNode;
@@ -49,6 +50,7 @@ import org.opensearch.cluster.routing.allocation.decider.Decision;
 import org.opensearch.cluster.routing.allocation.decider.Decision.Type;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.snapshots.SnapshotShardSizeInfo;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -394,6 +396,19 @@ public class BalancedSingleShardTests extends OpenSearchAllocationTestCase {
         }
 
         return Tuple.tuple(clusterState, rebalanceDecision);
+    }
+
+    private RoutingAllocation newRoutingAllocation(AllocationDeciders deciders, ClusterState state) {
+        RoutingAllocation allocation = new RoutingAllocation(
+            deciders,
+            new RoutingNodes(state, false),
+            state,
+            ClusterInfo.EMPTY,
+            SnapshotShardSizeInfo.EMPTY,
+            System.nanoTime()
+        );
+        allocation.debugDecision(true);
+        return allocation;
     }
 
     private void assertAssignedNodeRemainsSame(

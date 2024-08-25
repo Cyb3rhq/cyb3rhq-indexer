@@ -527,14 +527,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
     }
 
     protected Translog createTranslog(Path translogPath, LongSupplier primaryTermSupplier) throws IOException {
-        TranslogConfig translogConfig = new TranslogConfig(
-            shardId,
-            translogPath,
-            INDEX_SETTINGS,
-            BigArrays.NON_RECYCLING_INSTANCE,
-            "",
-            false
-        );
+        TranslogConfig translogConfig = new TranslogConfig(shardId, translogPath, INDEX_SETTINGS, BigArrays.NON_RECYCLING_INSTANCE, "");
         String translogUUID = Translog.createEmptyTranslog(
             translogPath,
             SequenceNumbers.NO_OPS_PERFORMED,
@@ -884,8 +877,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
             translogPath,
             indexSettings,
             BigArrays.NON_RECYCLING_INSTANCE,
-            "",
-            false
+            ""
         );
         final List<ReferenceManager.RefreshListener> extRefreshListenerList = externalRefreshListener == null
             ? emptyList()
@@ -906,8 +898,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
                 update -> {},
                 () -> 0L,
                 (leases, listener) -> listener.onResponse(new ReplicationResponse()),
-                () -> SafeCommitInfo.EMPTY,
-                sId -> false
+                () -> SafeCommitInfo.EMPTY
             );
             globalCheckpointSupplier = replicationTracker;
             retentionLeasesSupplier = replicationTracker::getRetentionLeases;
@@ -954,14 +945,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
                 .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)
                 .build()
         );
-        TranslogConfig translogConfig = new TranslogConfig(
-            shardId,
-            translogPath,
-            indexSettings,
-            BigArrays.NON_RECYCLING_INSTANCE,
-            "",
-            false
-        );
+        TranslogConfig translogConfig = new TranslogConfig(shardId, translogPath, indexSettings, BigArrays.NON_RECYCLING_INSTANCE, "");
         return new EngineConfig.Builder().shardId(config.getShardId())
             .threadPool(config.getThreadPool())
             .indexSettings(indexSettings)
@@ -1126,28 +1110,13 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
         boolean allowDuplicate,
         boolean includeNestedDocs
     ) throws Exception {
-        return generateHistoryOnReplica(
-            numOps,
-            allowGapInSeqNo,
-            allowDuplicate,
-            includeNestedDocs,
-            randomFrom(Engine.Operation.TYPE.values())
-        );
-    }
-
-    public List<Engine.Operation> generateHistoryOnReplica(
-        int numOps,
-        boolean allowGapInSeqNo,
-        boolean allowDuplicate,
-        boolean includeNestedDocs,
-        Engine.Operation.TYPE opType
-    ) throws Exception {
         long seqNo = 0;
         final int maxIdValue = randomInt(numOps * 2);
         final List<Engine.Operation> operations = new ArrayList<>(numOps);
         CheckedBiFunction<String, Integer, ParsedDocument, IOException> nestedParsedDocFactory = nestedParsedDocFactory();
         for (int i = 0; i < numOps; i++) {
             final String id = Integer.toString(randomInt(maxIdValue));
+            final Engine.Operation.TYPE opType = randomFrom(Engine.Operation.TYPE.values());
             final boolean isNestedDoc = includeNestedDocs && opType == Engine.Operation.TYPE.INDEX && randomBoolean();
             final int nestedValues = between(0, 3);
             final long startTime = threadPool.relativeTimeInNanos();
@@ -1564,10 +1533,14 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
      * Exposes a translog associated with the given engine for testing purpose.
      */
     public static Translog getTranslog(Engine engine) {
-        assert engine instanceof InternalEngine || engine instanceof NRTReplicationEngine
-            : "only InternalEngines or NRTReplicationEngines have translogs, got: " + engine.getClass();
-        engine.ensureOpen();
-        TranslogManager translogManager = engine.translogManager();
+        // This is a hack for bwc with 2.x, main will use TranslogManager on Engine directly
+        if (engine instanceof NRTReplicationEngine) {
+            return ((NRTReplicationEngine) (engine)).getTranslog();
+        }
+        assert engine instanceof InternalEngine : "only InternalEngines or NRTReplicationEngines have translogs, got: " + engine.getClass();
+        InternalEngine internalEngine = (InternalEngine) engine;
+        internalEngine.ensureOpen();
+        TranslogManager translogManager = internalEngine.translogManager();
         assert translogManager instanceof InternalTranslogManager : "only InternalTranslogManager have translogs, got: "
             + engine.getClass();
         InternalTranslogManager internalTranslogManager = (InternalTranslogManager) translogManager;

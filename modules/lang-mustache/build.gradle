@@ -33,12 +33,12 @@ apply plugin: 'opensearch.internal-cluster-test'
 
 opensearchplugin {
   description 'Mustache scripting integration for OpenSearch'
-  classname 'org.opensearch.script.mustache.MustacheModulePlugin'
+  classname 'org.opensearch.script.mustache.MustachePlugin'
   hasClientJar = true // For the template apis and query
 }
 
 dependencies {
-  api "com.github.spullara.mustache.java:compiler:0.9.14"
+  api "com.github.spullara.mustache.java:compiler:0.9.10"
 }
 
 restResources {

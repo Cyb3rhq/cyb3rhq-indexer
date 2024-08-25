@@ -327,7 +327,7 @@ public class CancellableTasksIT extends ParameterizedStaticSettingsOpenSearchInt
         mainAction.startSubTask(taskId, subRequest, future);
         TransportException te = expectThrows(TransportException.class, future::actionGet);
         assertThat(te.getCause(), instanceOf(TaskCancelledException.class));
-        assertThat(te.getCause().getMessage(), equalTo("The parent task was cancelled, shouldn't start any child tasks, by user request"));
+        assertThat(te.getCause().getMessage(), equalTo("The parent task was cancelled, shouldn't start any child tasks"));
         allowEntireRequest(rootRequest);
         waitForRootTask(rootTaskFuture);
         ensureAllBansRemoved();
@@ -386,7 +386,7 @@ public class CancellableTasksIT extends ParameterizedStaticSettingsOpenSearchInt
             assertThat(
                 cause.getMessage(),
                 anyOf(
-                    equalTo("The parent task was cancelled, shouldn't start any child tasks, by user request"),
+                    equalTo("The parent task was cancelled, shouldn't start any child tasks"),
                     containsString("Task cancelled before it started:"),
                     equalTo("Task was cancelled while executing")
                 )

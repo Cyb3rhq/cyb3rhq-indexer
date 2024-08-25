@@ -101,8 +101,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.SEGMENTS;
-import static org.opensearch.index.remote.RemoteStoreEnums.DataType.LOCK_FILES;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
@@ -476,7 +474,8 @@ public abstract class AbstractSnapshotIntegTestCase extends OpenSearchIntegTestC
                 DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
                 jsonBuilder.toString().replace(Version.CURRENT.toString(), version.toString())
             ),
-            repositoryData.getGenId()
+            repositoryData.getGenId(),
+            randomBoolean()
         );
         Files.write(
             repoPath.resolve(BlobStoreRepository.INDEX_FILE_PREFIX + repositoryData.getGenId()),
@@ -561,16 +560,19 @@ public abstract class AbstractSnapshotIntegTestCase extends OpenSearchIntegTestC
     }
 
     protected String[] getLockFilesInRemoteStore(String remoteStoreIndex, String remoteStoreRepositoryName) throws IOException {
+        String indexUUID = client().admin()
+            .indices()
+            .prepareGetSettings(remoteStoreIndex)
+            .get()
+            .getSetting(remoteStoreIndex, IndexMetadata.SETTING_INDEX_UUID);
+        return getLockFilesInRemoteStore(remoteStoreIndex, remoteStoreRepositoryName, indexUUID);
+    }
+
+    protected String[] getLockFilesInRemoteStore(String remoteStoreIndex, String remoteStoreRepositoryName, String indexUUID)
+        throws IOException {
         final RepositoriesService repositoriesService = internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class);
         final BlobStoreRepository remoteStoreRepository = (BlobStoreRepository) repositoriesService.repository(remoteStoreRepositoryName);
-        BlobPath shardLevelBlobPath = getShardLevelBlobPath(
-            client(),
-            remoteStoreIndex,
-            remoteStoreRepository.basePath(),
-            "0",
-            SEGMENTS,
-            LOCK_FILES
-        );
+        BlobPath shardLevelBlobPath = remoteStoreRepository.basePath().add(indexUUID).add("0").add("segments").add("lock_files");
         BlobContainer blobContainer = remoteStoreRepository.blobStore().blobContainer(shardLevelBlobPath);
         try (RemoteBufferedOutputDirectory lockDirectory = new RemoteBufferedOutputDirectory(blobContainer)) {
             return lockDirectory.listAll();
@@ -604,7 +606,7 @@ public abstract class AbstractSnapshotIntegTestCase extends OpenSearchIntegTestC
             Collections.emptyList(),
             SnapshotState.FAILED,
             "failed on purpose",
-            Version.V_2_0_0,
+            SnapshotsService.OLD_SNAPSHOT_FORMAT,
             0L,
             0L,
             0,
@@ -620,7 +622,7 @@ public abstract class AbstractSnapshotIntegTestCase extends OpenSearchIntegTestC
                 getRepositoryData(repoName).getGenId(),
                 state.metadata(),
                 snapshotInfo,
-                Version.V_2_0_0,
+                SnapshotsService.OLD_SNAPSHOT_FORMAT,
                 Function.identity(),
                 f
             )

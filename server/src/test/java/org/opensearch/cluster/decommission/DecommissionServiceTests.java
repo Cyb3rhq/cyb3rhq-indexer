@@ -474,4 +474,10 @@ public class DecommissionServiceTests extends OpenSearchTestCase {
     final private static Set<DiscoveryNodeRole> DATA_ROLE = Collections.unmodifiableSet(
         new HashSet<>(Collections.singletonList(DiscoveryNodeRole.DATA_ROLE))
     );
+
+    private ClusterState removeNodes(ClusterState clusterState, String... nodeIds) {
+        DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder(clusterState.getNodes());
+        List.of(nodeIds).forEach(nodeBuilder::remove);
+        return allocationService.disassociateDeadNodes(ClusterState.builder(clusterState).nodes(nodeBuilder).build(), false, "test");
+    }
 }

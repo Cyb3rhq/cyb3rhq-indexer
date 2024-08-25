@@ -18,6 +18,7 @@ import org.opensearch.common.concurrent.GatedCloseable;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.env.Environment;
+import org.opensearch.index.codec.CodecService;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.IndexShardTestCase;
 import org.opensearch.index.store.Store;
@@ -53,7 +54,13 @@ public class CopyStateTests extends IndexShardTestCase {
 
     public void testCopyStateCreation() throws IOException {
         final IndexShard mockIndexShard = createMockIndexShard();
-        CopyState copyState = new CopyState(mockIndexShard);
+        CopyState copyState = new CopyState(
+            ReplicationCheckpoint.empty(
+                mockIndexShard.shardId(),
+                new CodecService(null, mockIndexShard.indexSettings(), null).codec("default").getName()
+            ),
+            mockIndexShard
+        );
         ReplicationCheckpoint checkpoint = copyState.getCheckpoint();
         assertEquals(TEST_SHARD_ID, checkpoint.getShardId());
         // version was never set so this should be zero
@@ -79,9 +86,7 @@ public class CopyStateTests extends IndexShardTestCase {
             mockShard.getOperationPrimaryTerm(),
             0L,
             0L,
-            0L,
-            Codec.getDefault().getName(),
-            SI_SNAPSHOT.asMap()
+            Codec.getDefault().getName()
         );
         final Tuple<GatedCloseable<SegmentInfos>, ReplicationCheckpoint> gatedCloseableReplicationCheckpointTuple = new Tuple<>(
             new GatedCloseable<>(testSegmentInfos, () -> {}),

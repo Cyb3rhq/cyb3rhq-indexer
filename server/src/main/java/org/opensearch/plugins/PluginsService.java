@@ -36,7 +36,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.DocValuesFormat;
-import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.PostingsFormat;
 import org.apache.lucene.util.SPIClassIterator;
 import org.opensearch.Build;
@@ -763,7 +762,6 @@ public class PluginsService implements ReportingService<PluginsAndModules> {
         // Codecs:
         PostingsFormat.reloadPostingsFormats(loader);
         DocValuesFormat.reloadDocValuesFormats(loader);
-        KnnVectorsFormat.reloadKnnVectorsFormat(loader);
         Codec.reloadCodecs(loader);
     }
 

@@ -32,6 +32,7 @@
 
 package org.opensearch.index.stats;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
@@ -78,7 +79,12 @@ public class IndexingPressureStats implements Writeable, ToXContentFragment {
         coordinatingRejections = in.readVLong();
         primaryRejections = in.readVLong();
         replicaRejections = in.readVLong();
-        memoryLimit = in.readVLong();
+
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            memoryLimit = in.readVLong();
+        } else {
+            memoryLimit = -1L;
+        }
     }
 
     public IndexingPressureStats(
@@ -124,7 +130,10 @@ public class IndexingPressureStats implements Writeable, ToXContentFragment {
         out.writeVLong(coordinatingRejections);
         out.writeVLong(primaryRejections);
         out.writeVLong(replicaRejections);
-        out.writeVLong(memoryLimit);
+
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            out.writeVLong(memoryLimit);
+        }
     }
 
     public long getTotalCombinedCoordinatingAndPrimaryBytes() {

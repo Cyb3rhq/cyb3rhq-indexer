@@ -37,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.opensearch.ExceptionsHelper;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchException;
 import org.opensearch.OpenSearchTimeoutException;
 import org.opensearch.action.ActionRunnable;
@@ -189,7 +190,7 @@ public class PeerRecoveryTargetService implements IndexEventListener {
     public void startRecovery(final IndexShard indexShard, final DiscoveryNode sourceNode, final RecoveryListener listener) {
         // create a new recovery status, and process...
         final long recoveryId = onGoingRecoveries.start(
-            new RecoveryTarget(indexShard, sourceNode, listener, threadPool),
+            new RecoveryTarget(indexShard, sourceNode, listener),
             recoverySettings.activityTimeout()
         );
         // we fork off quickly here and go async but this is called from the cluster state applier thread too and that can cause
@@ -246,7 +247,7 @@ public class PeerRecoveryTargetService implements IndexEventListener {
                     logger.trace("{} preparing shard for peer recovery", recoveryTarget.shardId());
                     indexShard.prepareForIndexRecovery();
                     final boolean hasRemoteSegmentStore = indexShard.indexSettings().isRemoteStoreEnabled();
-                    if (hasRemoteSegmentStore || indexShard.isRemoteSeeded()) {
+                    if (hasRemoteSegmentStore) {
                         // ToDo: This is a temporary mitigation to not fail the peer recovery flow in case there is
                         // an exception while downloading segments from remote store. For remote backed indexes, we
                         // plan to revamp this flow so that node-node segment copy will not happen.
@@ -260,8 +261,7 @@ public class PeerRecoveryTargetService implements IndexEventListener {
                             );
                         }
                     }
-                    final boolean hasRemoteTranslog = recoveryTarget.state().getPrimary() == false
-                        && indexShard.indexSettings().isAssignedOnRemoteNode();
+                    final boolean hasRemoteTranslog = recoveryTarget.state().getPrimary() == false && indexShard.isRemoteTranslogEnabled();
                     final boolean hasNoTranslog = indexShard.indexSettings().isRemoteSnapshot();
                     final boolean verifyTranslog = (hasRemoteTranslog || hasNoTranslog || hasRemoteSegmentStore) == false;
                     final long startingSeqNo = indexShard.recoverLocallyAndFetchStartSeqNo(!hasRemoteTranslog);
@@ -575,13 +575,7 @@ public class PeerRecoveryTargetService implements IndexEventListener {
             try (ReplicationRef<RecoveryTarget> recoveryRef = onGoingRecoveries.getSafe(request.recoveryId(), request.shardId())) {
                 final RecoveryTarget recoveryTarget = recoveryRef.get();
                 final ActionListener<Void> listener = recoveryTarget.createOrFinishListener(channel, Actions.FILE_CHUNK, request);
-                recoveryTarget.handleFileChunk(
-                    request,
-                    recoveryTarget,
-                    bytesSinceLastPause,
-                    recoverySettings.recoveryRateLimiter(),
-                    listener
-                );
+                recoveryTarget.handleFileChunk(request, recoveryTarget, bytesSinceLastPause, recoverySettings.rateLimiter(), listener);
             }
         }
     }
@@ -746,7 +740,11 @@ public class PeerRecoveryTargetService implements IndexEventListener {
                     recoverySettings.retryDelayNetwork(),
                     cause.getMessage()
                 );
-                reestablishRecovery(request, cause.getMessage(), recoverySettings.retryDelayNetwork());
+                if (request.sourceNode().getVersion().onOrAfter(LegacyESVersion.V_7_9_0)) {
+                    reestablishRecovery(request, cause.getMessage(), recoverySettings.retryDelayNetwork());
+                } else {
+                    retryRecovery(recoveryId, cause.getMessage(), recoverySettings.retryDelayNetwork(), recoverySettings.activityTimeout());
+                }
                 return;
             }
 

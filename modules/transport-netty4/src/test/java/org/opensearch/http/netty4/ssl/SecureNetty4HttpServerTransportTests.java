@@ -29,8 +29,7 @@ import org.opensearch.http.HttpServerTransport;
 import org.opensearch.http.HttpTransportSettings;
 import org.opensearch.http.NullDispatcher;
 import org.opensearch.http.netty4.Netty4HttpClient;
-import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
-import org.opensearch.plugins.TransportExceptionHandler;
+import org.opensearch.plugins.SecureTransportSettingsProvider;
 import org.opensearch.rest.BytesRestResponse;
 import org.opensearch.rest.RestChannel;
 import org.opensearch.rest.RestRequest;
@@ -41,6 +40,8 @@ import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.NettyAllocator;
 import org.opensearch.transport.SharedGroupFactory;
+import org.opensearch.transport.TcpTransport;
+import org.opensearch.transport.netty4.ssl.TrustAllManager;
 import org.junit.After;
 import org.junit.Before;
 
@@ -82,8 +83,8 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 
 import static org.opensearch.core.rest.RestStatus.BAD_REQUEST;
 import static org.opensearch.core.rest.RestStatus.OK;
@@ -103,7 +104,7 @@ public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {
     private ThreadPool threadPool;
     private MockBigArrays bigArrays;
     private ClusterSettings clusterSettings;
-    private SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider;
+    private SecureTransportSettingsProvider secureTransportSettingsProvider;
 
     @Before
     public void setup() throws Exception {
@@ -112,9 +113,14 @@ public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {
         bigArrays = new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
         clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
 
-        secureHttpTransportSettingsProvider = new SecureHttpTransportSettingsProvider() {
+        secureTransportSettingsProvider = new SecureTransportSettingsProvider() {
             @Override
-            public Optional<TransportExceptionHandler> buildHttpServerExceptionHandler(Settings settings, HttpServerTransport transport) {
+            public Optional<ServerExceptionHandler> buildHttpServerExceptionHandler(Settings settings, HttpServerTransport transport) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<ServerExceptionHandler> buildServerTransportExceptionHandler(Settings settings, TcpTransport transport) {
                 return Optional.empty();
             }
 
@@ -131,7 +137,7 @@ public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {
                     keyManagerFactory.init(keyStore, "password".toCharArray());
 
                     SSLEngine engine = SslContextBuilder.forServer(keyManagerFactory)
-                        .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                        .trustManager(TrustAllManager.INSTANCE)
                         .build()
                         .newEngine(NettyAllocator.getAllocator());
                     return Optional.of(engine);
@@ -139,6 +145,22 @@ public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {
                     | CertificateException ex) {
                     throw new SSLException(ex);
                 }
+            }
+
+            @Override
+            public Optional<SSLEngine> buildSecureServerTransportEngine(Settings settings, TcpTransport transport) throws SSLException {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<SSLEngine> buildSecureClientTransportEngine(Settings settings, String hostname, int port) throws SSLException {
+                return Optional.of(
+                    SslContextBuilder.forClient()
+                        .clientAuth(ClientAuth.NONE)
+                        .trustManager(TrustAllManager.INSTANCE)
+                        .build()
+                        .newEngine(NettyAllocator.getAllocator())
+                );
             }
         };
     }
@@ -219,7 +241,7 @@ public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {
                 dispatcher,
                 clusterSettings,
                 new SharedGroupFactory(settings),
-                secureHttpTransportSettingsProvider,
+                secureTransportSettingsProvider,
                 NoopTracer.INSTANCE
             )
         ) {
@@ -270,7 +292,7 @@ public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {
                 new NullDispatcher(),
                 clusterSettings,
                 new SharedGroupFactory(Settings.EMPTY),
-                secureHttpTransportSettingsProvider,
+                secureTransportSettingsProvider,
                 NoopTracer.INSTANCE
             )
         ) {
@@ -290,7 +312,7 @@ public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {
                     new NullDispatcher(),
                     clusterSettings,
                     new SharedGroupFactory(settings),
-                    secureHttpTransportSettingsProvider,
+                    secureTransportSettingsProvider,
                     NoopTracer.INSTANCE
                 )
             ) {
@@ -344,7 +366,7 @@ public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {
                 dispatcher,
                 clusterSettings,
                 new SharedGroupFactory(settings),
-                secureHttpTransportSettingsProvider,
+                secureTransportSettingsProvider,
                 NoopTracer.INSTANCE
             )
         ) {
@@ -408,7 +430,7 @@ public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {
                 dispatcher,
                 clusterSettings,
                 new SharedGroupFactory(Settings.EMPTY),
-                secureHttpTransportSettingsProvider,
+                secureTransportSettingsProvider,
                 NoopTracer.INSTANCE
             )
         ) {
@@ -465,7 +487,7 @@ public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {
                 dispatcher,
                 new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
                 new SharedGroupFactory(settings),
-                secureHttpTransportSettingsProvider,
+                secureTransportSettingsProvider,
                 NoopTracer.INSTANCE
             )
         ) {
@@ -540,7 +562,7 @@ public class SecureNetty4HttpServerTransportTests extends OpenSearchTestCase {
                 dispatcher,
                 new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
                 new SharedGroupFactory(settings),
-                secureHttpTransportSettingsProvider,
+                secureTransportSettingsProvider,
                 NoopTracer.INSTANCE
             )
         ) {

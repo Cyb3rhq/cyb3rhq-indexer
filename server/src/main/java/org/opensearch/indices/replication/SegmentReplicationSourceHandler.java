@@ -18,18 +18,16 @@ import org.opensearch.common.util.concurrent.ListenableFuture;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.store.StoreFileMetadata;
 import org.opensearch.indices.recovery.FileChunkWriter;
 import org.opensearch.indices.recovery.MultiChunkTransfer;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
 import org.opensearch.indices.replication.common.CopyState;
 import org.opensearch.indices.replication.common.ReplicationTimer;
+import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.Transports;
 
 import java.io.Closeable;
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -56,46 +54,48 @@ class SegmentReplicationSourceHandler {
     private final AtomicBoolean isReplicating = new AtomicBoolean();
     private final DiscoveryNode targetNode;
     private final String allocationId;
+
     private final FileChunkWriter writer;
 
     /**
      * Constructor.
      *
-     * @param targetNode              {@link DiscoveryNode} target node where files should be sent.
+     * @param targetNode              - {@link DiscoveryNode} target node where files should be sent.
      * @param writer                  {@link FileChunkWriter} implementation that sends file chunks over the transport layer.
-     * @param shard                   {@link IndexShard} The primary shard local to this node.
+     * @param threadPool              {@link ThreadPool} Thread pool.
+     * @param copyState               {@link CopyState} CopyState holding segment file metadata.
      * @param fileChunkSizeInBytes    {@link Integer}
      * @param maxConcurrentFileChunks {@link Integer}
      */
     SegmentReplicationSourceHandler(
         DiscoveryNode targetNode,
         FileChunkWriter writer,
-        IndexShard shard,
+        ThreadPool threadPool,
+        CopyState copyState,
         String allocationId,
         int fileChunkSizeInBytes,
         int maxConcurrentFileChunks
-    ) throws IOException {
+    ) {
         this.targetNode = targetNode;
-        this.shard = shard;
+        this.shard = copyState.getShard();
         this.logger = Loggers.getLogger(
             SegmentReplicationSourceHandler.class,
-            shard.shardId(),
+            copyState.getShard().shardId(),
             "sending segments to " + targetNode.getName()
         );
         this.segmentFileTransferHandler = new SegmentFileTransferHandler(
-            shard,
+            copyState.getShard(),
             targetNode,
             writer,
             logger,
-            shard.getThreadPool(),
+            threadPool,
             cancellableThreads,
             fileChunkSizeInBytes,
             maxConcurrentFileChunks
         );
         this.allocationId = allocationId;
-        this.copyState = new CopyState(shard);
+        this.copyState = copyState;
         this.writer = writer;
-        resources.add(copyState);
     }
 
     /**
@@ -109,7 +109,6 @@ class SegmentReplicationSourceHandler {
         if (request.getFilesToFetch().isEmpty()) {
             // before completion, alert the primary of the replica's state.
             shard.updateVisibleCheckpointForShard(request.getTargetAllocationId(), copyState.getCheckpoint());
-            IOUtils.closeWhileHandlingException(copyState);
             listener.onResponse(new GetSegmentFilesResponse(Collections.emptyList()));
             return;
         }
@@ -184,7 +183,10 @@ class SegmentReplicationSourceHandler {
     public void cancel(String reason) {
         writer.cancel();
         cancellableThreads.cancel(reason);
-        IOUtils.closeWhileHandlingException(copyState);
+    }
+
+    CopyState getCopyState() {
+        return copyState;
     }
 
     public boolean isReplicating() {
@@ -197,17 +199,5 @@ class SegmentReplicationSourceHandler {
 
     public String getAllocationId() {
         return allocationId;
-    }
-
-    public ReplicationCheckpoint getCheckpoint() {
-        return copyState.getCheckpoint();
-    }
-
-    public byte[] getInfosBytes() {
-        return copyState.getInfosBytes();
-    }
-
-    public ShardId shardId() {
-        return shard.shardId();
     }
 }

@@ -148,7 +148,7 @@ public class TransportSegmentReplicationStatsAction extends TransportBroadcastBy
         IndexShard indexShard = indexService.getShard(shardRouting.shardId().id());
         ShardId shardId = shardRouting.shardId();
 
-        if (indexShard.indexSettings().isSegRepEnabledOrRemoteNode() == false) {
+        if (indexShard.indexSettings().isSegRepEnabled() == false) {
             return null;
         }
 

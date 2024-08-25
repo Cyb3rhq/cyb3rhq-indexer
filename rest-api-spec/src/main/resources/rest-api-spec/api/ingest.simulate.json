@@ -1,7 +1,7 @@
 {
   "ingest.simulate":{
     "documentation":{
-      "url":"https://opensearch.org/docs/latest/ingest-pipelines/simulate-ingest/",
+      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/simulate-pipeline-api.html",
       "description":"Allows to simulate a pipeline with example documents."
     },
     "stability":"stable",

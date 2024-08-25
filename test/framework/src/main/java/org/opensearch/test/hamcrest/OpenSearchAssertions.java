@@ -272,7 +272,10 @@ public class OpenSearchAssertions {
             );
         }
         assertThat(
-            "Some expected ids were not found in search results: " + Arrays.toString(idsSet.toArray(new String[0])) + "." + shardStatus,
+            "Some expected ids were not found in search results: "
+                + Arrays.toString(idsSet.toArray(new String[idsSet.size()]))
+                + "."
+                + shardStatus,
             idsSet.size(),
             equalTo(0)
         );

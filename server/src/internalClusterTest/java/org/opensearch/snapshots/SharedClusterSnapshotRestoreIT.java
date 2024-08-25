@@ -148,7 +148,7 @@ public class SharedClusterSnapshotRestoreIT extends AbstractSnapshotIntegTestCas
                 }
             }
             if (!indicesToFlush.isEmpty()) {
-                String[] indices = indicesToFlush.toArray(new String[0]);
+                String[] indices = indicesToFlush.toArray(new String[indicesToFlush.size()]);
                 logger.info("--> starting asynchronous flush for indices {}", Arrays.toString(indices));
                 flushResponseFuture = client().admin().indices().prepareFlush(indices).execute();
             }
@@ -1803,7 +1803,7 @@ public class SharedClusterSnapshotRestoreIT extends AbstractSnapshotIntegTestCas
         assertThat(snapshotInfos.get(0).state(), equalTo(SnapshotState.SUCCESS));
         assertThat(snapshotInfos.get(0).snapshotId().getName(), equalTo("test-snap"));
 
-        assertAcked(client().admin().indices().prepareDelete(nbDocsPerIndex.keySet().toArray(new String[0])));
+        assertAcked(client().admin().indices().prepareDelete(nbDocsPerIndex.keySet().toArray(new String[nbDocsPerIndex.size()])));
 
         Predicate<String> isRestorableIndex = index -> corruptedIndex.getName().equals(index) == false;
 

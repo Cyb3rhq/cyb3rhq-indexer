@@ -76,8 +76,7 @@ public class TransportGetComponentTemplateAction extends TransportClusterManager
             threadPool,
             actionFilters,
             GetComponentTemplateAction.Request::new,
-            indexNameExpressionResolver,
-            true
+            indexNameExpressionResolver
         );
     }
 

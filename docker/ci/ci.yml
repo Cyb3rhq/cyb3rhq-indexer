@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  # Essentially wi-dev, but doesn't expose port 9200
+  wi-build:
+    image: wi-build:${VERSION}
+    container_name: wi-build_${VERSION}
+    build:
+      context: ./../..
+      dockerfile: ${REPO_PATH}/docker/dev/images/Dockerfile
+    volumes:
+      - ${REPO_PATH}:/home/cyb3rhq-indexer
+    entrypoint: ["tail", "-f", "/dev/null"]
+    user: "1000:1000"
+    working_dir: /home/cyb3rhq-indexer
+
+  wi-assemble:
+    image: wi-assemble:${VERSION}
+    container_name: wi-assemble_${VERSION}
+    build:
+      context: ./../..
+      dockerfile: ${REPO_PATH}/docker/ci/images/Dockerfile
+    volumes:
+      - ${REPO_PATH}/packaging_scripts:/home/cyb3rhq-indexer/packaging_scripts
+      - ${REPO_PATH}/artifacts:/home/cyb3rhq-indexer/artifacts
+      - ${REPO_PATH}/distribution/packages/src:/home/cyb3rhq-indexer/distribution/packages/src
+      - ${REPO_PATH}/buildSrc:/home/cyb3rhq-indexer/buildSrc
+    entrypoint: ["tail", "-f", "/dev/null"]
+    user: "1000:1000"
+    working_dir: /home/cyb3rhq-indexer

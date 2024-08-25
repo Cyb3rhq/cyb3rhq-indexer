@@ -81,15 +81,7 @@ public class FsProbe {
             if (fileCache != null && dataLocations[i].fileCacheReservedSize != ByteSizeValue.ZERO) {
                 paths[i].fileCacheReserved = adjustForHugeFilesystems(dataLocations[i].fileCacheReservedSize.getBytes());
                 paths[i].fileCacheUtilized = adjustForHugeFilesystems(fileCache.usage().usage());
-                // fileCacheFree will be less than zero if the cache being over-subscribed
-                long fileCacheFree = paths[i].fileCacheReserved - paths[i].fileCacheUtilized;
-                if (fileCacheFree > 0) {
-                    paths[i].available -= fileCacheFree;
-                }
-                // occurs if reserved file cache space is occupied by other files, like local indices
-                if (paths[i].available < 0) {
-                    paths[i].available = 0;
-                }
+                paths[i].available -= (paths[i].fileCacheReserved - paths[i].fileCacheUtilized);
             }
         }
         FsInfo.IoStats ioStats = null;
@@ -174,7 +166,7 @@ public class FsProbe {
                 }
             }
 
-            return new FsInfo.IoStats(devicesStats.toArray(new FsInfo.DeviceStats[0]));
+            return new FsInfo.IoStats(devicesStats.toArray(new FsInfo.DeviceStats[devicesStats.size()]));
         } catch (Exception e) {
             // do not fail Elasticsearch if something unexpected
             // happens here
@@ -219,11 +211,4 @@ public class FsProbe {
         return fsPath;
     }
 
-    public static long getTotalSize(NodePath nodePath) throws IOException {
-        return adjustForHugeFilesystems(nodePath.fileStore.getTotalSpace());
-    }
-
-    public static long getAvailableSize(NodePath nodePath) throws IOException {
-        return adjustForHugeFilesystems(nodePath.fileStore.getUsableSpace());
-    }
 }

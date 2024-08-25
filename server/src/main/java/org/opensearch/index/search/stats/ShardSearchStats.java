@@ -213,11 +213,6 @@ public final class ShardSearchStats implements SearchOperationListener {
         totalStats.pitMetric.inc(TimeUnit.NANOSECONDS.toMicros(System.nanoTime() - readerContext.getStartTimeInNano()));
     }
 
-    @Override
-    public void onSearchIdleReactivation() {
-        totalStats.searchIdleMetric.inc();
-    }
-
     /**
      * Holder of statistics values
      *
@@ -244,7 +239,6 @@ public final class ShardSearchStats implements SearchOperationListener {
         final CounterMetric scrollCurrent = new CounterMetric();
         final CounterMetric pitCurrent = new CounterMetric();
         final CounterMetric suggestCurrent = new CounterMetric();
-        final CounterMetric searchIdleMetric = new CounterMetric();
 
         SearchStats.Stats stats() {
             return new SearchStats.Stats(
@@ -266,8 +260,7 @@ public final class ShardSearchStats implements SearchOperationListener {
                 pitCurrent.count(),
                 suggestMetric.count(),
                 TimeUnit.NANOSECONDS.toMillis(suggestMetric.sum()),
-                suggestCurrent.count(),
-                searchIdleMetric.count()
+                suggestCurrent.count()
             );
         }
     }

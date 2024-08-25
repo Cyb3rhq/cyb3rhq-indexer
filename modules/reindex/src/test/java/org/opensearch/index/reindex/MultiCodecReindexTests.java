@@ -45,7 +45,7 @@ public class MultiCodecReindexTests extends ReindexTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(InternalSettingsPlugin.class, ReindexModulePlugin.class);
+        return List.of(InternalSettingsPlugin.class, ReindexPlugin.class);
     }
 
     public void testReindexingMultipleCodecs() throws InterruptedException, ExecutionException {

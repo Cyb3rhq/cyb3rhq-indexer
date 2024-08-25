@@ -81,7 +81,7 @@ public class ScriptedConditionTokenFilterTests extends OpenSearchTokenStreamTest
             }
         };
 
-        CommonAnalysisModulePlugin plugin = new CommonAnalysisModulePlugin();
+        CommonAnalysisPlugin plugin = new CommonAnalysisPlugin();
         plugin.createComponents(null, null, null, null, scriptService, null, null, null, null, null, null);
         AnalysisModule module = new AnalysisModule(TestEnvironment.newEnvironment(settings), Collections.singletonList(plugin));
 

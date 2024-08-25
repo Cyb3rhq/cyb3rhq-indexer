@@ -91,7 +91,10 @@ public class IndexStats implements Iterable<IndexShardStats> {
         for (Map.Entry<Integer, List<ShardStats>> entry : tmpIndexShards.entrySet()) {
             indexShards.put(
                 entry.getKey(),
-                new IndexShardStats(entry.getValue().get(0).getShardRouting().shardId(), entry.getValue().toArray(new ShardStats[0]))
+                new IndexShardStats(
+                    entry.getValue().get(0).getShardRouting().shardId(),
+                    entry.getValue().toArray(new ShardStats[entry.getValue().size()])
+                )
             );
         }
         return indexShards;
@@ -153,7 +156,7 @@ public class IndexStats implements Iterable<IndexShardStats> {
         }
 
         public IndexStats build() {
-            return new IndexStats(indexName, uuid, shards.toArray(new ShardStats[0]));
+            return new IndexStats(indexName, uuid, shards.toArray(new ShardStats[shards.size()]));
         }
     }
 }

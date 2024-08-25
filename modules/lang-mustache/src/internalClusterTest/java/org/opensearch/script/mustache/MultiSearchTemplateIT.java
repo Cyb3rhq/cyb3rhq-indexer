@@ -73,7 +73,7 @@ public class MultiSearchTemplateIT extends ParameterizedStaticSettingsOpenSearch
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singleton(MustacheModulePlugin.class);
+        return Collections.singleton(MustachePlugin.class);
     }
 
     public void testBasic() throws Exception {

@@ -83,7 +83,7 @@ public class HighlighterWithAnalyzersTests extends ParameterizedStaticSettingsOp
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(CommonAnalysisModulePlugin.class);
+        return Arrays.asList(CommonAnalysisPlugin.class);
     }
 
     public void testNgramHighlightingWithBrokenPositions() throws IOException {

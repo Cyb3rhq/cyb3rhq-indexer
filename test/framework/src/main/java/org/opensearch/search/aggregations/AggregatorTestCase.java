@@ -69,7 +69,6 @@ import org.opensearch.common.TriFunction;
 import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.lease.Releasables;
 import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
-import org.opensearch.common.lucene.search.Queries;
 import org.opensearch.common.network.NetworkAddress;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.BigArrays;
@@ -96,10 +95,8 @@ import org.opensearch.index.fielddata.IndexFieldDataCache;
 import org.opensearch.index.fielddata.IndexFieldDataService;
 import org.opensearch.index.mapper.BinaryFieldMapper;
 import org.opensearch.index.mapper.CompletionFieldMapper;
-import org.opensearch.index.mapper.ConstantKeywordFieldMapper;
 import org.opensearch.index.mapper.ContentPath;
 import org.opensearch.index.mapper.DateFieldMapper;
-import org.opensearch.index.mapper.DerivedFieldMapper;
 import org.opensearch.index.mapper.FieldAliasMapper;
 import org.opensearch.index.mapper.FieldMapper;
 import org.opensearch.index.mapper.GeoPointFieldMapper;
@@ -115,11 +112,9 @@ import org.opensearch.index.mapper.ObjectMapper;
 import org.opensearch.index.mapper.ObjectMapper.Nested;
 import org.opensearch.index.mapper.RangeFieldMapper;
 import org.opensearch.index.mapper.RangeType;
-import org.opensearch.index.mapper.StarTreeMapper;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.SearchOperationListener;
 import org.opensearch.indices.IndicesModule;
 import org.opensearch.indices.fielddata.cache.IndicesFieldDataCache;
 import org.opensearch.indices.mapper.MapperRegistry;
@@ -129,6 +124,7 @@ import org.opensearch.search.SearchModule;
 import org.opensearch.search.aggregations.AggregatorFactories.Builder;
 import org.opensearch.search.aggregations.MultiBucketConsumerService.MultiBucketConsumer;
 import org.opensearch.search.aggregations.bucket.nested.NestedAggregationBuilder;
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregator;
 import org.opensearch.search.aggregations.metrics.MetricsAggregator;
 import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;
@@ -202,8 +198,6 @@ public abstract class AggregatorTestCase extends OpenSearchTestCase {
         denylist.add(ObjectMapper.NESTED_CONTENT_TYPE); // TODO support for nested
         denylist.add(CompletionFieldMapper.CONTENT_TYPE); // TODO support completion
         denylist.add(FieldAliasMapper.CONTENT_TYPE); // TODO support alias
-        denylist.add(DerivedFieldMapper.CONTENT_TYPE); // TODO support derived fields
-        denylist.add(StarTreeMapper.CONTENT_TYPE); // TODO evaluate support for star tree fields
         TYPE_TEST_DENYLIST = denylist;
     }
 
@@ -308,20 +302,6 @@ public abstract class AggregatorTestCase extends OpenSearchTestCase {
         return createAggregator(aggregationBuilder, searchContext);
     }
 
-    protected <A extends Aggregator> A createAggregatorWithCustomizableSearchContext(
-        Query query,
-        AggregationBuilder aggregationBuilder,
-        IndexSearcher indexSearcher,
-        IndexSettings indexSettings,
-        MultiBucketConsumer bucketConsumer,
-        Consumer<SearchContext> customizeSearchContext,
-        MappedFieldType... fieldTypes
-    ) throws IOException {
-        SearchContext searchContext = createSearchContext(indexSearcher, indexSettings, query, bucketConsumer, fieldTypes);
-        customizeSearchContext.accept(searchContext);
-        return createAggregator(aggregationBuilder, searchContext);
-    }
-
     protected <A extends Aggregator> A createAggregator(AggregationBuilder aggregationBuilder, SearchContext searchContext)
         throws IOException {
         @SuppressWarnings("unchecked")
@@ -381,9 +361,6 @@ public abstract class AggregatorTestCase extends OpenSearchTestCase {
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
         when(searchContext.indexShard()).thenReturn(indexShard);
-        SearchOperationListener searchOperationListener = new SearchOperationListener() {
-        };
-        when(indexShard.getSearchOperationListener()).thenReturn(searchOperationListener);
         when(searchContext.aggregations()).thenReturn(new SearchContextAggregations(AggregatorFactories.EMPTY, bucketConsumer));
         when(searchContext.query()).thenReturn(query);
         when(searchContext.bucketCollectorProcessor()).thenReturn(new BucketCollectorProcessor());
@@ -430,7 +407,6 @@ public abstract class AggregatorTestCase extends OpenSearchTestCase {
         );
         fieldNameToType.putAll(getFieldAliases(fieldTypes));
 
-        when(searchContext.maxAggRewriteFilters()).thenReturn(10_000);
         registerFieldTypes(searchContext, mapperService, fieldNameToType);
         doAnswer(invocation -> {
             /* Store the release-ables so we can release them at the end of the test case. This is important because aggregations don't
@@ -540,17 +516,6 @@ public abstract class AggregatorTestCase extends OpenSearchTestCase {
         return searchAndReduce(createIndexSettings(), searcher, query, builder, maxBucket, fieldTypes);
     }
 
-    protected <A extends InternalAggregation, C extends Aggregator> A searchAndReduce(
-        IndexSettings indexSettings,
-        IndexSearcher searcher,
-        Query query,
-        AggregationBuilder builder,
-        int maxBucket,
-        MappedFieldType... fieldTypes
-    ) throws IOException {
-        return searchAndReduce(indexSettings, searcher, query, builder, maxBucket, false, fieldTypes);
-    }
-
     /**
      * Collects all documents that match the provided query {@link Query} and
      * returns the reduced {@link InternalAggregation}.
@@ -565,15 +530,11 @@ public abstract class AggregatorTestCase extends OpenSearchTestCase {
         Query query,
         AggregationBuilder builder,
         int maxBucket,
-        boolean hasNested,
         MappedFieldType... fieldTypes
     ) throws IOException {
         final IndexReaderContext ctx = searcher.getTopReaderContext();
         final PipelineTree pipelines = builder.buildPipelineTree();
         List<InternalAggregation> aggs = new ArrayList<>();
-        if (hasNested) {
-            query = Queries.filtered(query, Queries.newNonNestedFilter());
-        }
         Query rewritten = searcher.rewrite(query);
         MultiBucketConsumer bucketConsumer = new MultiBucketConsumer(
             maxBucket,
@@ -815,10 +776,6 @@ public abstract class AggregatorTestCase extends OpenSearchTestCase {
             if (mappedType.getKey().equals(TextFieldMapper.CONTENT_TYPE) == false
                 && mappedType.getKey().equals(MatchOnlyTextFieldMapper.CONTENT_TYPE) == false) {
                 source.put("doc_values", "true");
-            }
-
-            if (mappedType.getKey().equals(ConstantKeywordFieldMapper.CONTENT_TYPE) == true) {
-                source.put("value", "default_value");
             }
 
             Mapper.Builder builder = mappedType.getValue().parse(fieldName, source, new MockParserContext());
@@ -1159,7 +1116,7 @@ public abstract class AggregatorTestCase extends OpenSearchTestCase {
         private final AtomicInteger collectCounter;
         public final Aggregator delegate;
 
-        public CountingAggregator(AtomicInteger collectCounter, Aggregator delegate) {
+        public CountingAggregator(AtomicInteger collectCounter, TermsAggregator delegate) {
             this.collectCounter = collectCounter;
             this.delegate = delegate;
         }

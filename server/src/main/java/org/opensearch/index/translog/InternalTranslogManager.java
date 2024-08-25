@@ -47,6 +47,10 @@ public class InternalTranslogManager implements TranslogManager, Closeable {
     private final Supplier<LocalCheckpointTracker> localCheckpointTrackerSupplier;
     private final Logger logger;
 
+    public AtomicBoolean getPendingTranslogRecovery() {
+        return pendingTranslogRecovery;
+    }
+
     public InternalTranslogManager(
         TranslogConfig translogConfig,
         LongSupplier primaryTermSupplier,
@@ -104,11 +108,6 @@ public class InternalTranslogManager implements TranslogManager, Closeable {
             }
             throw new TranslogException(shardId, "failed to roll translog", e);
         }
-    }
-
-    @Override
-    public Translog.Snapshot newChangesSnapshot(long fromSeqNo, long toSeqNo, boolean requiredFullRange) throws IOException {
-        return translog.newSnapshot(fromSeqNo, toSeqNo, requiredFullRange);
     }
 
     /**
@@ -437,12 +436,6 @@ public class InternalTranslogManager implements TranslogManager, Closeable {
      * @return if the translog should be flushed
      */
     public boolean shouldPeriodicallyFlush(long localCheckpointOfLastCommit, long flushThreshold) {
-        /*
-         * This can trigger flush depending upon translog's implementation
-         */
-        if (translog.shouldFlush()) {
-            return true;
-        }
         // This is the minimum seqNo that is referred in translog and considered for calculating translog size
         long minTranslogRefSeqNo = translog.getMinUnreferencedSeqNoInSegments(localCheckpointOfLastCommit + 1);
         final long minReferencedTranslogGeneration = translog.getMinGenerationForSeqNo(minTranslogRefSeqNo).translogFileGeneration;

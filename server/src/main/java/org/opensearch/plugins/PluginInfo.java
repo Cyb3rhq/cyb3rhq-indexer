@@ -206,9 +206,13 @@ public class PluginInfo implements Writeable, ToXContentObject {
         }
         this.javaVersion = in.readString();
         this.classname = in.readString();
-        this.customFolderName = in.readString();
-        this.extendedPlugins = in.readStringList();
-        this.hasNativeController = in.readBoolean();
+        if (in.getVersion().onOrAfter(Version.V_1_1_0)) {
+            customFolderName = in.readString();
+        } else {
+            customFolderName = this.name;
+        }
+        extendedPlugins = in.readStringList();
+        hasNativeController = in.readBoolean();
     }
 
     @Override
@@ -227,10 +231,12 @@ public class PluginInfo implements Writeable, ToXContentObject {
         }
         out.writeString(javaVersion);
         out.writeString(classname);
-        if (customFolderName != null) {
-            out.writeString(customFolderName);
-        } else {
-            out.writeString(name);
+        if (out.getVersion().onOrAfter(Version.V_1_1_0)) {
+            if (customFolderName != null) {
+                out.writeString(customFolderName);
+            } else {
+                out.writeString(name);
+            }
         }
         out.writeStringCollection(extendedPlugins);
         out.writeBoolean(hasNativeController);
@@ -323,8 +329,7 @@ public class PluginInfo implements Writeable, ToXContentObject {
         }
 
         final String customFolderNameValue = propsMap.remove("custom.foldername");
-        final String customFolderName;
-        customFolderName = customFolderNameValue;
+        final String customFolderName = customFolderNameValue;
 
         final String extendedString = propsMap.remove("extended.plugins");
         final List<String> extendedPlugins;

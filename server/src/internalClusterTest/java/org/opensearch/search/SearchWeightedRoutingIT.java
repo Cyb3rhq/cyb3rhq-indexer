@@ -1122,7 +1122,7 @@ public class SearchWeightedRoutingIT extends OpenSearchIntegTestCase {
     }
 
     /**
-     * Assert that preference search with custom string doesn't hit a node in weighed away az
+     * Assert that preference based search is not allowed with strict weighted shard routing
      */
     @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/8030")
     public void testStrictWeightedRoutingWithCustomString() {
@@ -1136,13 +1136,14 @@ public class SearchWeightedRoutingIT extends OpenSearchIntegTestCase {
         int nodeCountPerAZ = 1;
         Map<String, List<String>> nodeMap = setupCluster(nodeCountPerAZ, commonSettings);
 
-        int numShards = 20;
-        int numReplicas = 2;
+        int numShards = 10;
+        int numReplicas = 1;
         setUpIndexing(numShards, numReplicas);
 
         logger.info("--> setting shard routing weights for weighted round robin");
         Map<String, Double> weights = Map.of("a", 1.0, "b", 1.0, "c", 0.0);
         setShardRoutingWeights(weights);
+        String nodeInZoneA = nodeMap.get("a").get(0);
         String customPreference = randomAlphaOfLength(10);
 
         SearchResponse searchResponse = internalCluster().client(nodeMap.get("b").get(0))
@@ -1175,7 +1176,6 @@ public class SearchWeightedRoutingIT extends OpenSearchIntegTestCase {
         } catch (AssertionError ae) {
             assertSearchInAZ("a");
         }
-
     }
 
     /**
@@ -1210,7 +1210,6 @@ public class SearchWeightedRoutingIT extends OpenSearchIntegTestCase {
         for (DiscoveryNode node : dataNodes) {
             nodeIDMap.put(node.getName(), node.getId());
         }
-
         SearchResponse searchResponse = internalCluster().client(nodeMap.get("b").get(0))
             .prepareSearch()
             .setPreference(randomFrom("_local", "_prefer_nodes:" + "zone:a", customPreference))

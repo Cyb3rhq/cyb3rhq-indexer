@@ -32,6 +32,7 @@
 
 package org.opensearch.action.admin.cluster.node.stats;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.action.support.nodes.BaseNodeResponse;
 import org.opensearch.cluster.node.DiscoveryNode;
@@ -39,7 +40,6 @@ import org.opensearch.cluster.node.DiscoveryNodeRole;
 import org.opensearch.cluster.routing.WeightedRoutingStats;
 import org.opensearch.cluster.service.ClusterManagerThrottlingStats;
 import org.opensearch.common.Nullable;
-import org.opensearch.common.cache.service.NodeCacheStats;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.indices.breaker.AllCircuitBreakerStats;
@@ -159,9 +159,6 @@ public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
     @Nullable
     private AdmissionControlStats admissionControlStats;
 
-    @Nullable
-    private NodeCacheStats nodeCacheStats;
-
     public NodeStats(StreamInput in) throws IOException {
         super(in);
         timestamp = in.readVLong();
@@ -181,11 +178,23 @@ public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
         ingestStats = in.readOptionalWriteable(IngestStats::new);
         adaptiveSelectionStats = in.readOptionalWriteable(AdaptiveSelectionStats::new);
         scriptCacheStats = null;
-        if (scriptStats != null) {
-            scriptCacheStats = scriptStats.toScriptCacheStats();
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_8_0)) {
+            if (in.getVersion().before(LegacyESVersion.V_7_9_0)) {
+                scriptCacheStats = in.readOptionalWriteable(ScriptCacheStats::new);
+            } else if (scriptStats != null) {
+                scriptCacheStats = scriptStats.toScriptCacheStats();
+            }
         }
-        indexingPressureStats = in.readOptionalWriteable(IndexingPressureStats::new);
-        shardIndexingPressureStats = in.readOptionalWriteable(ShardIndexingPressureStats::new);
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_9_0)) {
+            indexingPressureStats = in.readOptionalWriteable(IndexingPressureStats::new);
+        } else {
+            indexingPressureStats = null;
+        }
+        if (in.getVersion().onOrAfter(Version.V_1_2_0)) {
+            shardIndexingPressureStats = in.readOptionalWriteable(ShardIndexingPressureStats::new);
+        } else {
+            shardIndexingPressureStats = null;
+        }
 
         if (in.getVersion().onOrAfter(Version.V_2_4_0)) {
             searchBackpressureStats = in.readOptionalWriteable(SearchBackpressureStats::new);
@@ -233,15 +242,11 @@ public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
         } else {
             repositoriesStats = null;
         }
+        // TODO: change to V_2_12_0 on main after backport to 2.x
         if (in.getVersion().onOrAfter(Version.V_2_12_0)) {
             admissionControlStats = in.readOptionalWriteable(AdmissionControlStats::new);
         } else {
             admissionControlStats = null;
-        }
-        if (in.getVersion().onOrAfter(Version.V_2_14_0)) {
-            nodeCacheStats = in.readOptionalWriteable(NodeCacheStats::new);
-        } else {
-            nodeCacheStats = null;
         }
     }
 
@@ -273,8 +278,7 @@ public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
         @Nullable SearchPipelineStats searchPipelineStats,
         @Nullable SegmentReplicationRejectionStats segmentReplicationRejectionStats,
         @Nullable RepositoriesStats repositoriesStats,
-        @Nullable AdmissionControlStats admissionControlStats,
-        @Nullable NodeCacheStats nodeCacheStats
+        @Nullable AdmissionControlStats admissionControlStats
     ) {
         super(node);
         this.timestamp = timestamp;
@@ -304,7 +308,6 @@ public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
         this.segmentReplicationRejectionStats = segmentReplicationRejectionStats;
         this.repositoriesStats = repositoriesStats;
         this.admissionControlStats = admissionControlStats;
-        this.nodeCacheStats = nodeCacheStats;
     }
 
     public long getTimestamp() {
@@ -462,11 +465,6 @@ public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
         return admissionControlStats;
     }
 
-    @Nullable
-    public NodeCacheStats getNodeCacheStats() {
-        return nodeCacheStats;
-    }
-
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
@@ -489,9 +487,15 @@ public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
         out.writeOptionalWriteable(discoveryStats);
         out.writeOptionalWriteable(ingestStats);
         out.writeOptionalWriteable(adaptiveSelectionStats);
-        out.writeOptionalWriteable(indexingPressureStats);
-        out.writeOptionalWriteable(shardIndexingPressureStats);
-
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_8_0) && out.getVersion().before(LegacyESVersion.V_7_9_0)) {
+            out.writeOptionalWriteable(scriptCacheStats);
+        }
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_9_0)) {
+            out.writeOptionalWriteable(indexingPressureStats);
+        }
+        if (out.getVersion().onOrAfter(Version.V_1_2_0)) {
+            out.writeOptionalWriteable(shardIndexingPressureStats);
+        }
         if (out.getVersion().onOrAfter(Version.V_2_4_0)) {
             out.writeOptionalWriteable(searchBackpressureStats);
         }
@@ -519,11 +523,9 @@ public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
         if (out.getVersion().onOrAfter(Version.V_2_12_0)) {
             out.writeOptionalWriteable(repositoriesStats);
         }
+
         if (out.getVersion().onOrAfter(Version.V_2_12_0)) {
             out.writeOptionalWriteable(admissionControlStats);
-        }
-        if (out.getVersion().onOrAfter(Version.V_2_14_0)) {
-            out.writeOptionalWriteable(nodeCacheStats);
         }
     }
 
@@ -621,15 +623,11 @@ public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
         if (getSegmentReplicationRejectionStats() != null) {
             getSegmentReplicationRejectionStats().toXContent(builder, params);
         }
-
         if (getRepositoriesStats() != null) {
             getRepositoriesStats().toXContent(builder, params);
         }
         if (getAdmissionControlStats() != null) {
             getAdmissionControlStats().toXContent(builder, params);
-        }
-        if (getNodeCacheStats() != null) {
-            getNodeCacheStats().toXContent(builder, params);
         }
         return builder;
     }

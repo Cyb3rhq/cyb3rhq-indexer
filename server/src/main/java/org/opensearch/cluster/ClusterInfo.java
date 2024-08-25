@@ -33,7 +33,6 @@
 package org.opensearch.cluster;
 
 import org.opensearch.Version;
-import org.opensearch.cluster.routing.RoutingNode;
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.core.common.io.stream.StreamInput;
@@ -43,6 +42,7 @@ import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.index.store.StoreStats;
 import org.opensearch.index.store.remote.filecache.FileCacheStats;
 
 import java.io.IOException;
@@ -69,8 +69,6 @@ public class ClusterInfo implements ToXContentFragment, Writeable {
     final Map<ShardRouting, String> routingToDataPath;
     final Map<NodeAndPath, ReservedSpace> reservedSpace;
     final Map<String, FileCacheStats> nodeFileCacheStats;
-    private long avgTotalBytes;
-    private long avgFreeByte;
 
     protected ClusterInfo() {
         this(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
@@ -100,7 +98,6 @@ public class ClusterInfo implements ToXContentFragment, Writeable {
         this.routingToDataPath = routingToDataPath;
         this.reservedSpace = reservedSpace;
         this.nodeFileCacheStats = nodeFileCacheStats;
-        calculateAvgFreeAndTotalBytes(mostAvailableSpaceUsage);
     }
 
     public ClusterInfo(StreamInput in) throws IOException {
@@ -109,7 +106,11 @@ public class ClusterInfo implements ToXContentFragment, Writeable {
         Map<String, Long> sizeMap = in.readMap(StreamInput::readString, StreamInput::readLong);
         Map<ShardRouting, String> routingMap = in.readMap(ShardRouting::new, StreamInput::readString);
         Map<NodeAndPath, ReservedSpace> reservedSpaceMap;
-        reservedSpaceMap = in.readMap(NodeAndPath::new, ReservedSpace::new);
+        if (in.getVersion().onOrAfter(StoreStats.RESERVED_BYTES_VERSION)) {
+            reservedSpaceMap = in.readMap(NodeAndPath::new, ReservedSpace::new);
+        } else {
+            reservedSpaceMap = Map.of();
+        }
 
         this.leastAvailableSpaceUsage = Collections.unmodifiableMap(leastMap);
         this.mostAvailableSpaceUsage = Collections.unmodifiableMap(mostMap);
@@ -121,39 +122,6 @@ public class ClusterInfo implements ToXContentFragment, Writeable {
         } else {
             this.nodeFileCacheStats = Map.of();
         }
-
-        calculateAvgFreeAndTotalBytes(mostAvailableSpaceUsage);
-    }
-
-    /**
-     * Returns a {@link DiskUsage} for the {@link RoutingNode} using the
-     * average usage of other nodes in the disk usage map.
-     * @param usages Map of nodeId to DiskUsage for all known nodes
-     */
-    private void calculateAvgFreeAndTotalBytes(final Map<String, DiskUsage> usages) {
-        if (usages == null || usages.isEmpty()) {
-            this.avgTotalBytes = 0;
-            this.avgFreeByte = 0;
-            return;
-        }
-
-        long totalBytes = 0;
-        long freeBytes = 0;
-        for (DiskUsage du : usages.values()) {
-            totalBytes += du.getTotalBytes();
-            freeBytes += du.getFreeBytes();
-        }
-
-        this.avgTotalBytes = totalBytes / usages.size();
-        this.avgFreeByte = freeBytes / usages.size();
-    }
-
-    public long getAvgFreeByte() {
-        return avgFreeByte;
-    }
-
-    public long getAvgTotalBytes() {
-        return avgTotalBytes;
     }
 
     @Override
@@ -162,7 +130,9 @@ public class ClusterInfo implements ToXContentFragment, Writeable {
         out.writeMap(this.mostAvailableSpaceUsage, StreamOutput::writeString, (o, v) -> v.writeTo(o));
         out.writeMap(this.shardSizes, StreamOutput::writeString, (o, v) -> out.writeLong(v == null ? -1 : v));
         out.writeMap(this.routingToDataPath, (o, k) -> k.writeTo(o), StreamOutput::writeString);
-        out.writeMap(this.reservedSpace, (o, v) -> v.writeTo(o), (o, v) -> v.writeTo(o));
+        if (out.getVersion().onOrAfter(StoreStats.RESERVED_BYTES_VERSION)) {
+            out.writeMap(this.reservedSpace, (o, v) -> v.writeTo(o), (o, v) -> v.writeTo(o));
+        }
         if (out.getVersion().onOrAfter(Version.V_2_10_0)) {
             out.writeMap(this.nodeFileCacheStats, StreamOutput::writeString, (o, v) -> v.writeTo(o));
         }

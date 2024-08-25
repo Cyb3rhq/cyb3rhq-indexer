@@ -55,6 +55,7 @@ plugins {
   id 'opensearch.docker-support'
   id 'opensearch.global-build-info'
   id "com.diffplug.spotless" version "6.25.0" apply false
+  id "org.gradle.test-retry" version "1.5.8" apply false
   id "test-report-aggregation"
   id 'jacoco-report-aggregation'
 }
@@ -69,13 +70,6 @@ apply from: 'gradle/fips.gradle'
 apply from: 'gradle/run.gradle'
 apply from: 'gradle/missing-javadoc.gradle'
 apply from: 'gradle/code-coverage.gradle'
-
-// Disable unconditional publishing of build scans
-develocity {
-  buildScan {
-    publishing.onlyIf { false }
-  }
-}
 
 // common maven publishing configuration
 allprojects {
@@ -232,16 +226,8 @@ tasks.register("verifyVersions") {
  */
 
 boolean bwc_tests_enabled = true
-
 /* place an issue link here when committing bwc changes */
-String bwc_tests_disabled_issue = ""
-
-/* there's no existing MacOS release, therefore disable bcw tests */
-if (Os.isFamily(Os.FAMILY_MAC)) {
-  bwc_tests_enabled = false
-  bwc_tests_disabled_issue = "https://github.com/opensearch-project/OpenSearch/issues/4173"
-}
-
+final String bwc_tests_disabled_issue = ""
 if (bwc_tests_enabled == false) {
   if (bwc_tests_disabled_issue.isEmpty()) {
     throw new GradleException("bwc_tests_disabled_issue must be set when bwc_tests_enabled == false")
@@ -468,8 +454,9 @@ gradle.projectsEvaluated {
 
 // test retry configuration
 subprojects {
+  apply plugin: "org.gradle.test-retry"
   tasks.withType(Test).configureEach {
-    develocity.testRetry {
+    retry {
       if (BuildParams.isCi()) {
         maxRetries = 3
         maxFailures = 10

@@ -32,7 +32,6 @@
 
 package org.opensearch.http;
 
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.logging.DeprecationLogger;
 import org.opensearch.common.network.InetAddresses;
 import org.opensearch.core.common.io.stream.StreamInput;
@@ -48,9 +47,8 @@ import java.io.IOException;
 /**
  * Information about an http connection
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public class HttpInfo implements ReportingService.Info {
 
     private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(HttpInfo.class);

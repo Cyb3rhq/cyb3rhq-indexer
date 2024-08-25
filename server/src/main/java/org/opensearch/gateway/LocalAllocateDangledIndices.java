@@ -113,7 +113,10 @@ public class LocalAllocateDangledIndices {
             listener.onFailure(new ClusterManagerNotDiscoveredException("no cluster-manager to send allocate dangled request"));
             return;
         }
-        AllocateDangledRequest request = new AllocateDangledRequest(clusterService.localNode(), indices.toArray(new IndexMetadata[0]));
+        AllocateDangledRequest request = new AllocateDangledRequest(
+            clusterService.localNode(),
+            indices.toArray(new IndexMetadata[indices.size()])
+        );
         transportService.sendRequest(
             clusterManagerNode,
             ACTION_NAME,

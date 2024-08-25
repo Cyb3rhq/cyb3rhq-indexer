@@ -78,9 +78,7 @@ public class RemoteStorePressureService {
         for (LagValidator lagValidator : lagValidators) {
             if (lagValidator.validate(remoteSegmentTransferTracker, shardId) == false) {
                 remoteSegmentTransferTracker.incrementRejectionCount(lagValidator.name());
-                String rejectionMessage = lagValidator.rejectionMessage(remoteSegmentTransferTracker, shardId);
-                logger.warn("Rejecting write requests for shard due to remote backpressure:  {}", rejectionMessage);
-                throw new OpenSearchRejectedExecutionException(rejectionMessage);
+                throw new OpenSearchRejectedExecutionException(lagValidator.rejectionMessage(remoteSegmentTransferTracker, shardId));
             }
         }
     }

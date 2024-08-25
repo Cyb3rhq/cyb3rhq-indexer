@@ -76,8 +76,7 @@ public class TransportGetComposableIndexTemplateAction extends TransportClusterM
             threadPool,
             actionFilters,
             GetComposableIndexTemplateAction.Request::new,
-            indexNameExpressionResolver,
-            true
+            indexNameExpressionResolver
         );
     }
 

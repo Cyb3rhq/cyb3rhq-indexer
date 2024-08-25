@@ -44,6 +44,7 @@ import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Setting.Property;
 import org.opensearch.common.settings.Settings;
 
+import java.util.Locale;
 import java.util.function.BiFunction;
 
 import static org.opensearch.cluster.routing.allocation.decider.Decision.THROTTLE;
@@ -210,9 +211,20 @@ public class ThrottlingAllocationDecider extends AllocationDecider {
             allocation,
             currentInRecoveries,
             replicasInitialRecoveries,
-            this::getInitialPrimaryNodeOutgoingRecoveries,
+            (x, y) -> getInitialPrimaryNodeOutgoingRecoveries(x, y),
             replicasInitialRecoveries,
-            true
+            String.format(
+                Locale.ROOT,
+                "[%s=%d]",
+                CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(),
+                replicasInitialRecoveries
+            ),
+            String.format(
+                Locale.ROOT,
+                "[%s=%d]",
+                CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(),
+                replicasInitialRecoveries
+            )
         );
     }
 
@@ -226,9 +238,22 @@ public class ThrottlingAllocationDecider extends AllocationDecider {
             allocation,
             currentInRecoveries,
             concurrentIncomingRecoveries,
-            this::getPrimaryNodeOutgoingRecoveries,
+            (x, y) -> getPrimaryNodeOutgoingRecoveries(x, y),
             concurrentOutgoingRecoveries,
-            false
+            String.format(
+                Locale.ROOT,
+                "[%s=%d] (can also be set via [%s])",
+                CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_INCOMING_RECOVERIES_SETTING.getKey(),
+                concurrentIncomingRecoveries,
+                CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_RECOVERIES_SETTING.getKey()
+            ),
+            String.format(
+                Locale.ROOT,
+                "[%s=%d] (can also be set via [%s])",
+                CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_OUTGOING_RECOVERIES_SETTING.getKey(),
+                concurrentOutgoingRecoveries,
+                CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_RECOVERIES_SETTING.getKey()
+            )
         );
     }
 
@@ -249,30 +274,18 @@ public class ThrottlingAllocationDecider extends AllocationDecider {
         int inRecoveriesLimit,
         BiFunction<ShardRouting, RoutingAllocation, Integer> primaryNodeOutRecoveriesFunc,
         int outRecoveriesLimit,
-        boolean isInitialShardCopies
+        String incomingRecoveriesSettingMsg,
+        String outGoingRecoveriesSettingMsg
     ) {
         // Allocating a shard to this node will increase the incoming recoveries
         if (currentInRecoveries >= inRecoveriesLimit) {
-            if (isInitialShardCopies) {
-                return allocation.decision(
-                    THROTTLE,
-                    NAME,
-                    "reached the limit of incoming shard recoveries [%d], cluster setting [%s=%d]",
-                    currentInRecoveries,
-                    CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(),
-                    inRecoveriesLimit
-                );
-            } else {
-                return allocation.decision(
-                    THROTTLE,
-                    NAME,
-                    "reached the limit of incoming shard recoveries [%d], cluster setting [%s=%d] (can also be set via [%s])",
-                    currentInRecoveries,
-                    CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_INCOMING_RECOVERIES_SETTING.getKey(),
-                    inRecoveriesLimit,
-                    CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_RECOVERIES_SETTING.getKey()
-                );
-            }
+            return allocation.decision(
+                THROTTLE,
+                NAME,
+                "reached the limit of incoming shard recoveries [%d], cluster setting %s",
+                currentInRecoveries,
+                incomingRecoveriesSettingMsg
+            );
         } else {
             // search for corresponding recovery source (= primary shard) and check number of outgoing recoveries on that node
             ShardRouting primaryShard = allocation.routingNodes().activePrimary(shardRouting.shardId());
@@ -281,30 +294,14 @@ public class ThrottlingAllocationDecider extends AllocationDecider {
             }
             int primaryNodeOutRecoveries = primaryNodeOutRecoveriesFunc.apply(shardRouting, allocation);
             if (primaryNodeOutRecoveries >= outRecoveriesLimit) {
-                if (isInitialShardCopies) {
-                    return allocation.decision(
-                        THROTTLE,
-                        NAME,
-                        "reached the limit of outgoing shard recoveries [%d] on the node [%s] which holds the primary, "
-                            + "cluster setting [%s=%d]",
-                        primaryNodeOutRecoveries,
-                        primaryShard.currentNodeId(),
-                        CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(),
-                        inRecoveriesLimit
-                    );
-                } else {
-                    return allocation.decision(
-                        THROTTLE,
-                        NAME,
-                        "reached the limit of outgoing shard recoveries [%d] on the node [%s] which holds the primary, "
-                            + "cluster setting [%s=%d] (can also be set via [%s])",
-                        primaryNodeOutRecoveries,
-                        primaryShard.currentNodeId(),
-                        CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_OUTGOING_RECOVERIES_SETTING.getKey(),
-                        outRecoveriesLimit,
-                        CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_RECOVERIES_SETTING.getKey()
-                    );
-                }
+                return allocation.decision(
+                    THROTTLE,
+                    NAME,
+                    "reached the limit of outgoing shard recoveries [%d] on the node [%s] which holds the primary, " + "cluster setting %s",
+                    primaryNodeOutRecoveries,
+                    primaryShard.currentNodeId(),
+                    outGoingRecoveriesSettingMsg
+                );
             } else {
                 return allocation.decision(
                     YES,

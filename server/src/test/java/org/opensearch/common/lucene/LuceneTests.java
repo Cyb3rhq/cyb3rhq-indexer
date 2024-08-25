@@ -102,11 +102,61 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.hamcrest.Matchers.equalTo;
 
 public class LuceneTests extends OpenSearchTestCase {
     private static final NamedWriteableRegistry EMPTY_REGISTRY = new NamedWriteableRegistry(Collections.emptyList());
+
+    public void testWaitForIndex() throws Exception {
+        final MockDirectoryWrapper dir = newMockDirectory();
+
+        final AtomicBoolean succeeded = new AtomicBoolean(false);
+        final CountDownLatch latch = new CountDownLatch(1);
+
+        // Create a shadow Engine, which will freak out because there is no
+        // index yet
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    latch.await();
+                    if (Lucene.waitForIndex(dir, 5000)) {
+                        succeeded.set(true);
+                    } else {
+                        fail("index should have eventually existed!");
+                    }
+                } catch (InterruptedException e) {
+                    // ignore interruptions
+                } catch (Exception e) {
+                    fail("should have been able to create the engine! " + e.getMessage());
+                }
+            }
+        });
+        t.start();
+
+        // count down latch
+        // now shadow engine should try to be created
+        latch.countDown();
+
+        IndexWriterConfig iwc = newIndexWriterConfig();
+        iwc.setIndexDeletionPolicy(NoDeletionPolicy.INSTANCE);
+        iwc.setMergePolicy(NoMergePolicy.INSTANCE);
+        iwc.setMaxBufferedDocs(2);
+        IndexWriter writer = new IndexWriter(dir, iwc);
+        Document doc = new Document();
+        doc.add(new TextField("id", "1", random().nextBoolean() ? Field.Store.YES : Field.Store.NO));
+        writer.addDocument(doc);
+        writer.commit();
+
+        t.join();
+
+        writer.close();
+        dir.close();
+        assertTrue("index should have eventually existed", succeeded.get());
+    }
 
     public void testCleanIndex() throws IOException {
         MockDirectoryWrapper dir = newMockDirectory();
@@ -334,7 +384,7 @@ public class LuceneTests extends OpenSearchTestCase {
      */
     public void testReadSegmentInfosExtendedCompatibility() throws IOException {
         final String pathToTestIndex = "/indices/bwc/es-6.3.0/testIndex-es-6.3.0.zip";
-        final Version minVersion = LegacyESVersion.V_6_0_0;
+        final Version minVersion = LegacyESVersion.fromId(6000099);
         Path tmp = createTempDir();
         TestUtil.unzip(getClass().getResourceAsStream(pathToTestIndex), tmp);
         try (MockDirectoryWrapper dir = newMockFSDirectory(tmp)) {

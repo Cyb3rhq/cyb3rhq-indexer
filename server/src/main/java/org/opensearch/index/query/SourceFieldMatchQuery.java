@@ -73,7 +73,7 @@ public class SourceFieldMatchQuery extends Query {
 
     @Override
     public Query rewrite(IndexSearcher indexSearcher) throws IOException {
-        Query rewritten = delegateQuery.rewrite(indexSearcher);
+        Query rewritten = indexSearcher.rewrite(delegateQuery);
         if (rewritten == delegateQuery) {
             return this;
         }

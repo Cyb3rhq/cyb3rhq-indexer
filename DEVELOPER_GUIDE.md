@@ -57,12 +57,10 @@
       - [Developer API](#developer-api)
       - [User API](#user-api)
       - [Experimental Development](#experimental-development)
-      - [API Compatibility Checks](#api-compatibility-checks)
     - [Backports](#backports)
     - [LineLint](#linelint)
     - [Lucene Snapshots](#lucene-snapshots)
     - [Flaky Tests](#flaky-tests)
-    - [Gradle Check Metrics Dashboard](#gradle-check-metrics-dashboard)
 
 # Developer Guide
 
@@ -609,20 +607,6 @@ a LTS feature but with additional guard rails and communication mechanisms to si
 release, or be removed altogether. Any Developer or User APIs implemented along with the experimental feature should be marked with `@ExperimentalApi` (or documented as
 `@opensearch.experimental`) annotation to signal the implementation is not subject to LTS and does not follow backwards compatibility guidelines.
 
-#### API Compatibility Checks
-
-The compatibility checks for public APIs are performed using [japicmp](https://siom79.github.io/japicmp/) and are available as separate Gradle tasks (those are run on demand at the moment):
-
-```
-./gradlew japicmp
-```
-
-By default, the API compatibility checks are run against the latest released version of the OpenSearch, however the target version to compare to could be provided using system property during the build, fe.:
-
-```
-./gradlew japicmp  -Djapicmp.compare.version=2.14.0-SNAPSHOT
-```
-
 ### Backports
 
 The Github workflow in [`backport.yml`](.github/workflows/backport.yml) creates backport PRs automatically when the original PR with an appropriate label `backport <backport-branch-name>` is merged to main with the backport workflow run successfully on the PR. For example, if a PR on main needs to be backported to `1.x` branch, add a label `backport 1.x` to the PR and make sure the backport workflow runs on the PR along with other checks. Once this PR is merged to main, the workflow will create a backport PR to the `1.x` branch.
@@ -645,25 +629,18 @@ Pass a list of files or directories to limit your search.
 
 ### Lucene Snapshots
 
-The Github workflow in [lucene-snapshots.yml](.github/workflows/lucene-snapshots.yml) is a GitHub workflow executable by maintainers to build a top-down snapshot build of Lucene.
+The Github workflow in [lucene-snapshots.yml](.github/workflows/lucene-snapshots.yml) is a Github worfklow executable by maintainers to build a top-down snapshot build of lucene.
 These snapshots are available to test compatibility with upcoming changes to Lucene by updating the version at [version.properties](buildsrc/version.properties) with the `version-snapshot-sha` version. Example: `lucene = 10.0.0-snapshot-2e941fc`.
-Note that these snapshots do not follow the Maven [naming convention](https://maven.apache.org/guides/getting-started/index.html#what-is-a-snapshot-version) with a (case sensitive) SNAPSHOT suffix, so these artifacts are considered "releases" by build systems such as the `mavenContent` repository filter in Gradle or `releases` artifact policies in Maven.
 
 ### Flaky Tests
 
-If you encounter a test failure locally or in CI that is seemingly unrelated to the change in your pull request, it may be a known flaky test or a new test failure. OpenSearch has a very large test suite with long running, often failing (flaky), integration tests. Such individual tests are labelled as [Flaky Random Test Failure](https://github.com/opensearch-project/OpenSearch/issues?q=is%3Aopen+is%3Aissue+label%3A%22flaky-test%22). Your help is wanted fixing these!
+OpenSearch has a very large test suite with long running, often failing (flaky), integration tests. Such individual tests are labelled as [Flaky Random Test Failure](https://github.com/opensearch-project/OpenSearch/issues?q=is%3Aopen+is%3Aissue+label%3A%22flaky-test%22). Your help is wanted fixing these!
 
-The automation [gradle-check-flaky-test-detector](https://build.ci.opensearch.org/job/gradle-check-flaky-test-detector/), which runs in OpenSearch public Jenkins, identifies failing flaky issues that are part of post-merge actions. Once a flaky test is identified, the automation creates an issue with detailed report that includes links to all relevant commits, the Gradle check build log, the test report, and pull requests that are impacted with the flaky test failures. This automation leverages data from the [OpenSearch Metrics Project](https://github.com/opensearch-project/opensearch-metrics) to establish a baseline for creating the issue and updating the flaky test report. For all flaky test issues created by automation, visit this [link](https://github.com/opensearch-project/OpenSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%3Etest-failure+author%3Aopensearch-ci-bot).
+If you encounter a build/test failure in CI that is unrelated to the change in your pull request, it may be a known flaky test, or a new test failure.
 
-If you still see a failing test that is not part of the post merge actions, please do:
-
-* Follow failed CI links, and locate the failing test(s) or use the [Gradle Check Metrics Dashboard](#gradle-check-metrics-dashboard).
-* Copy-paste the failure into a comment of your PR.
-* Search through issues using the name of the failed test for whether this is a known flaky test.
-* If no existing issue is found, open one.
-* Retry CI via the GitHub UX or by pushing an update to your PR.
-
-
-### Gradle Check Metrics Dashboard
-
-To get the comprehensive insights and analysis of the Gradle Check test failures, visit the [OpenSearch Gradle Check Metrics Dashboard](https://metrics.opensearch.org/_dashboards/app/dashboards#/view/e5e64d40-ed31-11ee-be99-69d1dbc75083). This dashboard is part of the [OpenSearch Metrics Project](https://github.com/opensearch-project/opensearch-metrics) initiative. The dashboard contains multiple data points that can help investigate and resolve flaky failures. Additionally, this dashboard can be used to drill down, slice, and dice the data using multiple supported filters, which further aids in troubleshooting and resolving issues.
+1. Follow failed CI links, and locate the failing test(s).
+2. Copy-paste the failure into a comment of your PR.
+3. Search through [issues](https://github.com/opensearch-project/OpenSearch/issues?q=is%3Aopen+is%3Aissue+label%3A%22flaky-test%22) using the name of the failed test for whether this is a known flaky test.
+5. If an existing issue is found, paste a link to the known issue in a comment to your PR.
+6. If no existing issue is found, open one.
+7. Retry CI via the GitHub UX or by pushing an update to your PR.

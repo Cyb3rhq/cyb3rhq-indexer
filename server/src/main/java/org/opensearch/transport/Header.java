@@ -33,7 +33,6 @@
 package org.opensearch.transport;
 
 import org.opensearch.Version;
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.core.common.io.stream.StreamInput;
@@ -48,9 +47,8 @@ import java.util.TreeSet;
 /**
  * Transport Header
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public class Header {
 
     private static final String RESPONSE_NAME = "NO_ACTION_NAME_FOR_RESPONSES";
@@ -75,11 +73,11 @@ public class Header {
         return networkMessageSize;
     }
 
-    public Version getVersion() {
+    Version getVersion() {
         return version;
     }
 
-    public long getRequestId() {
+    long getRequestId() {
         return requestId;
     }
 
@@ -87,7 +85,7 @@ public class Header {
         return status;
     }
 
-    public boolean isRequest() {
+    boolean isRequest() {
         return TransportStatus.isRequest(status);
     }
 
@@ -99,7 +97,7 @@ public class Header {
         return TransportStatus.isError(status);
     }
 
-    public boolean isHandshake() {
+    boolean isHandshake() {
         return TransportStatus.isHandshake(status);
     }
 

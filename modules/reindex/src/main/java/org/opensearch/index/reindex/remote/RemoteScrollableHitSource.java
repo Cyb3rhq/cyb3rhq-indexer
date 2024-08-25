@@ -32,11 +32,10 @@
 
 package org.opensearch.index.reindex.remote;
 
-import org.apache.hc.core5.http.ContentTooLongException;
-import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.HttpEntity;
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.http.ContentTooLongException;
+import org.apache.http.HttpEntity;
+import org.apache.http.entity.ContentType;
+import org.apache.http.util.EntityUtils;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
@@ -227,7 +226,7 @@ public class RemoteScrollableHitSource extends ScrollableHitSource {
                             InputStream content = responseEntity.getContent();
                             MediaType mediaType = null;
                             if (responseEntity.getContentType() != null) {
-                                final String mimeType = ContentType.parse(responseEntity.getContentType()).getMimeType();
+                                final String mimeType = ContentType.parse(responseEntity.getContentType().getValue()).getMimeType();
                                 mediaType = MediaType.fromMediaType(mimeType);
                             }
                             if (mediaType == null) {
@@ -318,11 +317,7 @@ public class RemoteScrollableHitSource extends ScrollableHitSource {
         if (entity == null) {
             return "No error body.";
         } else {
-            try {
-                return "body=" + EntityUtils.toString(entity);
-            } catch (final ParseException ex) {
-                throw new IOException(ex);
-            }
+            return "body=" + EntityUtils.toString(entity);
         }
     }
 }

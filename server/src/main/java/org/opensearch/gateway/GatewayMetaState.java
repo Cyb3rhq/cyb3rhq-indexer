@@ -36,6 +36,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.opensearch.ExceptionsHelper;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.cluster.ClusterChangedEvent;
@@ -64,7 +65,6 @@ import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.env.NodeMetadata;
 import org.opensearch.gateway.remote.ClusterMetadataManifest;
 import org.opensearch.gateway.remote.RemoteClusterStateService;
-import org.opensearch.gateway.remote.model.RemoteClusterStateManifestInfo;
 import org.opensearch.index.recovery.RemoteStoreRestoreService;
 import org.opensearch.index.recovery.RemoteStoreRestoreService.RemoteRestoreResult;
 import org.opensearch.node.Node;
@@ -145,8 +145,8 @@ public class GatewayMetaState implements Closeable {
                 long currentTerm = onDiskState.currentTerm;
 
                 if (onDiskState.empty()) {
-                    assert Version.CURRENT.major <= Version.V_3_0_0.major + 1
-                        : "legacy metadata loader is not needed anymore from v4 onwards";
+                    assert Version.CURRENT.major <= LegacyESVersion.V_7_0_0.major + 1
+                        : "legacy metadata loader is not needed anymore from v9 onwards";
                     final Tuple<Manifest, Metadata> legacyState = metaStateService.loadFullState();
                     if (legacyState.v1().isEmpty() == false) {
                         metadata = legacyState.v2();
@@ -666,8 +666,6 @@ public class GatewayMetaState implements Closeable {
 
         private ClusterState lastAcceptedState;
         private ClusterMetadataManifest lastAcceptedManifest;
-
-        private String lastUploadedManifestFile;
         private final RemoteClusterStateService remoteClusterStateService;
         private String previousClusterUUID;
 
@@ -693,14 +691,10 @@ public class GatewayMetaState implements Closeable {
             // But for RemotePersistedState, the state is only pushed by the active cluster. So this method is not required.
         }
 
-        public String getLastUploadedManifestFile() {
-            return lastUploadedManifestFile;
-        }
-
         @Override
         public void setLastAcceptedState(ClusterState clusterState) {
             try {
-                final RemoteClusterStateManifestInfo manifestDetails;
+                final ClusterMetadataManifest manifest;
                 if (shouldWriteFullClusterState(clusterState)) {
                     final Optional<ClusterMetadataManifest> latestManifest = remoteClusterStateService.getLatestClusterMetadataManifest(
                         clusterState.getClusterName().value(),
@@ -718,21 +712,15 @@ public class GatewayMetaState implements Closeable {
                             clusterState.metadata().clusterUUID()
                         );
                     }
-                    manifestDetails = remoteClusterStateService.writeFullMetadata(clusterState, previousClusterUUID);
+                    manifest = remoteClusterStateService.writeFullMetadata(clusterState, previousClusterUUID);
                 } else {
                     assert verifyManifestAndClusterState(lastAcceptedManifest, lastAcceptedState) == true
                         : "Previous manifest and previous ClusterState are not in sync";
-                    manifestDetails = remoteClusterStateService.writeIncrementalMetadata(
-                        lastAcceptedState,
-                        clusterState,
-                        lastAcceptedManifest
-                    );
+                    manifest = remoteClusterStateService.writeIncrementalMetadata(lastAcceptedState, clusterState, lastAcceptedManifest);
                 }
-                assert verifyManifestAndClusterState(manifestDetails.getClusterMetadataManifest(), clusterState) == true
-                    : "Manifest and ClusterState are not in sync";
-                lastAcceptedManifest = manifestDetails.getClusterMetadataManifest();
+                assert verifyManifestAndClusterState(manifest, clusterState) == true : "Manifest and ClusterState are not in sync";
+                lastAcceptedManifest = manifest;
                 lastAcceptedState = clusterState;
-                lastUploadedManifestFile = manifestDetails.getManifestFileName();
             } catch (Exception e) {
                 remoteClusterStateService.writeMetadataFailed();
                 handleExceptionOnWrite(e);
@@ -780,13 +768,12 @@ public class GatewayMetaState implements Closeable {
                     metadataBuilder.clusterUUIDCommitted(true);
                     clusterState = ClusterState.builder(lastAcceptedState).metadata(metadataBuilder).build();
                 }
-                final RemoteClusterStateManifestInfo committedManifestDetails = remoteClusterStateService.markLastStateAsCommitted(
+                final ClusterMetadataManifest committedManifest = remoteClusterStateService.markLastStateAsCommitted(
                     clusterState,
                     lastAcceptedManifest
                 );
-                lastAcceptedManifest = committedManifestDetails.getClusterMetadataManifest();
+                lastAcceptedManifest = committedManifest;
                 lastAcceptedState = clusterState;
-                lastUploadedManifestFile = committedManifestDetails.getManifestFileName();
             } catch (Exception e) {
                 handleExceptionOnWrite(e);
             }

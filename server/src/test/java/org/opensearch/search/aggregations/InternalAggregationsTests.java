@@ -44,9 +44,12 @@ import org.opensearch.search.aggregations.bucket.histogram.InternalDateHistogram
 import org.opensearch.search.aggregations.bucket.terms.StringTerms;
 import org.opensearch.search.aggregations.bucket.terms.StringTermsTests;
 import org.opensearch.search.aggregations.bucket.terms.TermsAggregator;
+import org.opensearch.search.aggregations.pipeline.AvgBucketPipelineAggregationBuilder;
 import org.opensearch.search.aggregations.pipeline.InternalSimpleValueTests;
 import org.opensearch.search.aggregations.pipeline.MaxBucketPipelineAggregationBuilder;
 import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
+import org.opensearch.search.aggregations.pipeline.SiblingPipelineAggregator;
+import org.opensearch.search.aggregations.pipeline.SumBucketPipelineAggregationBuilder;
 import org.opensearch.test.InternalAggregationTestCase;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -88,6 +91,7 @@ public class InternalAggregationsTests extends OpenSearchTestCase {
         );
         List<InternalAggregations> aggs = singletonList(InternalAggregations.from(Collections.singletonList(terms)));
         InternalAggregations reducedAggs = InternalAggregations.topLevelReduce(aggs, maxBucketReduceContext().forPartialReduction());
+        assertEquals(1, reducedAggs.getTopLevelPipelineAggregators().size());
         assertEquals(1, reducedAggs.aggregations.size());
     }
 
@@ -111,6 +115,7 @@ public class InternalAggregationsTests extends OpenSearchTestCase {
             Collections.singletonList(aggs),
             maxBucketReduceContext().forFinalReduction()
         );
+        assertEquals(0, reducedAggs.getTopLevelPipelineAggregators().size());
         assertEquals(2, reducedAggs.aggregations.size());
     }
 
@@ -124,6 +129,10 @@ public class InternalAggregationsTests extends OpenSearchTestCase {
     }
 
     public static InternalAggregations createTestInstance() throws Exception {
+        return createTestInstance(randomPipelineTree());
+    }
+
+    public static InternalAggregations createTestInstance(PipelineAggregator.PipelineTree pipelineTree) throws Exception {
         List<InternalAggregation> aggsList = new ArrayList<>();
         if (randomBoolean()) {
             StringTermsTests stringTermsTests = new StringTermsTests();
@@ -140,7 +149,23 @@ public class InternalAggregationsTests extends OpenSearchTestCase {
             InternalSimpleValueTests simpleValueTests = new InternalSimpleValueTests();
             aggsList.add(simpleValueTests.createTestInstance());
         }
-        return new InternalAggregations(aggsList);
+        return new InternalAggregations(aggsList, () -> pipelineTree);
+    }
+
+    private static PipelineAggregator.PipelineTree randomPipelineTree() {
+        List<PipelineAggregator> topLevelPipelineAggs = new ArrayList<>();
+        if (randomBoolean()) {
+            if (randomBoolean()) {
+                topLevelPipelineAggs.add((SiblingPipelineAggregator) new MaxBucketPipelineAggregationBuilder("name1", "bucket1").create());
+            }
+            if (randomBoolean()) {
+                topLevelPipelineAggs.add((SiblingPipelineAggregator) new AvgBucketPipelineAggregationBuilder("name2", "bucket2").create());
+            }
+            if (randomBoolean()) {
+                topLevelPipelineAggs.add((SiblingPipelineAggregator) new SumBucketPipelineAggregationBuilder("name3", "bucket3").create());
+            }
+        }
+        return new PipelineAggregator.PipelineTree(emptyMap(), topLevelPipelineAggs);
     }
 
     public void testSerialization() throws Exception {

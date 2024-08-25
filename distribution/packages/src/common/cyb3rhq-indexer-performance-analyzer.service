@@ -1,0 +1,21 @@
+# Copyright OpenSearch Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The OpenSearch Contributors require contributions made to
+# this file be licensed under the Apache-2.0 license or a
+# compatible open source license.
+
+[Unit]
+Description=cyb3rhq-indexer Performance Analyzer
+
+[Service]
+Type=simple
+ExecStart=/usr/share/cyb3rhq-indexer/bin/cyb3rhq-indexer-performance-analyzer/performance-analyzer-agent-cli
+Restart=on-failure
+User=cyb3rhq-indexer
+Group=cyb3rhq-indexer
+EnvironmentFile=-/etc/sysconfig/cyb3rhq-indexer
+WorkingDirectory=/usr/share/cyb3rhq-indexer
+
+[Install]
+WantedBy=multi-user.target

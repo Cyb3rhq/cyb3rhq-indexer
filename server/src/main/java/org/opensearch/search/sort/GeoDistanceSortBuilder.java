@@ -241,7 +241,7 @@ public class GeoDistanceSortBuilder extends SortBuilder<GeoDistanceSortBuilder> 
      * Returns the points to create the range distance facets from.
      */
     public GeoPoint[] points() {
-        return this.points.toArray(new GeoPoint[0]);
+        return this.points.toArray(new GeoPoint[this.points.size()]);
     }
 
     /**
@@ -576,7 +576,7 @@ public class GeoDistanceSortBuilder extends SortBuilder<GeoDistanceSortBuilder> 
             }
         }
 
-        GeoDistanceSortBuilder result = new GeoDistanceSortBuilder(fieldName, geoPoints.toArray(new GeoPoint[0]));
+        GeoDistanceSortBuilder result = new GeoDistanceSortBuilder(fieldName, geoPoints.toArray(new GeoPoint[geoPoints.size()]));
         result.geoDistance(geoDistance);
         result.unit(unit);
         result.order(order);
@@ -644,7 +644,7 @@ public class GeoDistanceSortBuilder extends SortBuilder<GeoDistanceSortBuilder> 
     private GeoPoint[] localPoints() {
         // validation was not available prior to 2.x, so to support bwc percolation queries we only ignore_malformed
         // on 2.x created indexes
-        GeoPoint[] localPoints = points.toArray(new GeoPoint[0]);
+        GeoPoint[] localPoints = points.toArray(new GeoPoint[points.size()]);
         if (GeoValidationMethod.isIgnoreMalformed(validation) == false) {
             for (GeoPoint point : localPoints) {
                 if (GeoUtils.isValidLatitude(point.lat()) == false) {

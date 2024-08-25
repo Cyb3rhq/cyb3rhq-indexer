@@ -175,7 +175,7 @@ public class AzureBlobStore implements BlobStore {
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
         service.close();
     }
 

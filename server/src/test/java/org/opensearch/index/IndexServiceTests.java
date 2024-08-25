@@ -423,7 +423,7 @@ public class IndexServiceTests extends OpenSearchSingleNodeTestCase {
         final String indexName = "test";
         IndexService indexService = createIndex(
             indexName,
-            Settings.builder().put(TRANSLOG_RETENTION_CHECK_INTERVAL_SETTING.getKey(), "200ms").build()
+            Settings.builder().put(TRANSLOG_RETENTION_CHECK_INTERVAL_SETTING.getKey(), "100ms").build()
         );
 
         Translog translog = IndexShardTestCase.getTranslog(indexService.getShard(0));
@@ -452,7 +452,12 @@ public class IndexServiceTests extends OpenSearchSingleNodeTestCase {
         assertTrue(indexService.getTrimTranslogTask().mustReschedule());
 
         final Engine readOnlyEngine = getEngine(indexService.getShard(0));
-        assertBusy(() -> assertTrue(isTranslogEmpty(readOnlyEngine)));
+        assertBusy(
+            () -> assertThat(
+                readOnlyEngine.getTranslogStats().getTranslogSizeInBytes(),
+                equalTo((long) Translog.DEFAULT_HEADER_SIZE_IN_BYTES)
+            )
+        );
 
         assertAcked(client().admin().indices().prepareOpen("test").setWaitForActiveShards(ActiveShardCount.DEFAULT));
 
@@ -460,12 +465,6 @@ public class IndexServiceTests extends OpenSearchSingleNodeTestCase {
         translog = IndexShardTestCase.getTranslog(indexService.getShard(0));
         assertThat(translog.totalOperations(), equalTo(0));
         assertThat(translog.stats().estimatedNumberOfOperations(), equalTo(0));
-    }
-
-    boolean isTranslogEmpty(Engine engine) {
-        long tlogSize = engine.translogManager().getTranslogStats().getTranslogSizeInBytes();
-        // translog contains 1(or 2 in some corner cases) empty readers.
-        return tlogSize == Translog.DEFAULT_HEADER_SIZE_IN_BYTES || tlogSize == 2 * Translog.DEFAULT_HEADER_SIZE_IN_BYTES;
     }
 
     public void testIllegalFsyncInterval() {

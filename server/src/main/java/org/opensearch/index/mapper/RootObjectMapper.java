@@ -32,6 +32,7 @@
 
 package org.opensearch.index.mapper;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.common.Explicit;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.annotation.PublicApi;
@@ -177,25 +178,14 @@ public class RootObjectMapper extends ObjectMapper {
 
             RootObjectMapper.Builder builder = new Builder(name);
             Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator();
-            Object compositeField = null;
             while (iterator.hasNext()) {
                 Map.Entry<String, Object> entry = iterator.next();
                 String fieldName = entry.getKey();
                 Object fieldNode = entry.getValue();
-                if (fieldName.equals("composite")) {
-                    compositeField = fieldNode;
+                if (parseObjectOrDocumentTypeProperties(fieldName, fieldNode, parserContext, builder)
+                    || processField(builder, fieldName, fieldNode, parserContext)) {
                     iterator.remove();
-                } else {
-                    if (parseObjectOrDocumentTypeProperties(fieldName, fieldNode, parserContext, builder)
-                        || processField(builder, fieldName, fieldNode, parserContext)) {
-                        iterator.remove();
-                    }
                 }
-            }
-            // Important : Composite field is made up of 2 or more source properties of the index, so this must be called
-            // after parsing all other properties
-            if (compositeField != null) {
-                parseCompositeField(builder, (Map<String, Object>) compositeField, parserContext);
             }
             return builder;
         }
@@ -467,7 +457,8 @@ public class RootObjectMapper extends ObjectMapper {
             }
         }
 
-        if (dynamicTemplateInvalid) {
+        final boolean shouldEmitDeprecationWarning = parserContext.indexVersionCreated().onOrAfter(LegacyESVersion.V_7_7_0);
+        if (dynamicTemplateInvalid && shouldEmitDeprecationWarning) {
             String message = String.format(
                 Locale.ROOT,
                 "dynamic template [%s] has invalid content [%s]",

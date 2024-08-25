@@ -35,8 +35,8 @@ import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.cluster.ClusterChangedEvent;
-import org.opensearch.cluster.ClusterManagerMetrics;
 import org.opensearch.cluster.ClusterName;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.ClusterStateTaskConfig;
@@ -85,7 +85,6 @@ import org.opensearch.discovery.HandshakingTransportAddressConnector;
 import org.opensearch.discovery.PeerFinder;
 import org.opensearch.discovery.SeedHostsProvider;
 import org.opensearch.discovery.SeedHostsResolver;
-import org.opensearch.gateway.remote.RemoteClusterStateService;
 import org.opensearch.monitor.NodeHealthService;
 import org.opensearch.monitor.StatusInfo;
 import org.opensearch.node.remotestore.RemoteStoreNodeService;
@@ -209,9 +208,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         ElectionStrategy electionStrategy,
         NodeHealthService nodeHealthService,
         PersistedStateRegistry persistedStateRegistry,
-        RemoteStoreNodeService remoteStoreNodeService,
-        ClusterManagerMetrics clusterManagerMetrics,
-        RemoteClusterStateService remoteClusterStateService
+        RemoteStoreNodeService remoteStoreNodeService
     ) {
         this.settings = settings;
         this.transportService = transportService;
@@ -263,25 +260,16 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             transportService,
             namedWriteableRegistry,
             this::handlePublishRequest,
-            this::handleApplyCommit,
-            remoteClusterStateService
+            this::handleApplyCommit
         );
-        this.leaderChecker = new LeaderChecker(
-            settings,
-            clusterSettings,
-            transportService,
-            this::onLeaderFailure,
-            nodeHealthService,
-            clusterManagerMetrics
-        );
+        this.leaderChecker = new LeaderChecker(settings, clusterSettings, transportService, this::onLeaderFailure, nodeHealthService);
         this.followersChecker = new FollowersChecker(
             settings,
             clusterSettings,
             transportService,
             this::onFollowerCheckRequest,
             this::removeNode,
-            nodeHealthService,
-            clusterManagerMetrics
+            nodeHealthService
         );
         this.nodeRemovalExecutor = new NodeRemovalClusterStateTaskExecutor(allocationService, logger);
         this.clusterApplier = clusterApplier;
@@ -964,7 +952,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
                 final boolean activePublication = currentPublication.map(CoordinatorPublication::isActiveForCurrentLeader).orElse(false);
                 if (becomingClusterManager && activePublication == false) {
-                    // cluster state update task to become cluster-manager is submitted to ClusterManagerService,
+                    // cluster state update task to become cluster-manager is submitted to MasterService,
                     // but publication has not started yet
                     assert followersChecker.getKnownFollowers().isEmpty() : followersChecker.getKnownFollowers();
                 } else {
@@ -1333,9 +1321,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                     + clusterState;
 
                 final PublicationTransportHandler.PublicationContext publicationContext = publicationHandler.newPublicationContext(
-                    clusterChangedEvent,
-                    coordinationState.get().isRemotePublicationEnabled(),
-                    persistedStateRegistry
+                    clusterChangedEvent
                 );
 
                 final PublishRequest publishRequest = coordinationState.get().handleClientValue(clusterState);
@@ -1854,7 +1840,13 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     }
 
     // TODO: only here temporarily for BWC development, remove once complete
+    public static Settings.Builder addZen1Attribute(boolean isZen1Node, Settings.Builder builder) {
+        return builder.put("node.attr.zen1", isZen1Node);
+    }
+
+    // TODO: only here temporarily for BWC development, remove once complete
     public static boolean isZen1Node(DiscoveryNode discoveryNode) {
-        return Booleans.isTrue(discoveryNode.getAttributes().getOrDefault("zen1", "false"));
+        return discoveryNode.getVersion().before(LegacyESVersion.V_7_0_0)
+            || (Booleans.isTrue(discoveryNode.getAttributes().getOrDefault("zen1", "false")));
     }
 }

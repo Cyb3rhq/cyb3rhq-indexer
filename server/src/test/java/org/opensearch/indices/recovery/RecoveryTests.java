@@ -137,8 +137,7 @@ public class RecoveryTests extends OpenSearchIndexLevelReplicationTestCase {
                     indexShard,
                     node,
                     recoveryListener,
-                    logger,
-                    threadPool
+                    logger
                 )
             );
             recoveryBlocked.await();
@@ -349,7 +348,7 @@ public class RecoveryTests extends OpenSearchIndexLevelReplicationTestCase {
         }
         IndexShard replicaShard = newShard(primaryShard.shardId(), false);
         updateMappings(replicaShard, primaryShard.indexSettings().getIndexMetadata());
-        recoverReplica(replicaShard, primaryShard, (r, sourceNode) -> new RecoveryTarget(r, sourceNode, recoveryListener, threadPool) {
+        recoverReplica(replicaShard, primaryShard, (r, sourceNode) -> new RecoveryTarget(r, sourceNode, recoveryListener) {
             @Override
             public void prepareForTranslogOperations(int totalTranslogOps, ActionListener<Void> listener) {
                 super.prepareForTranslogOperations(totalTranslogOps, listener);
@@ -481,7 +480,7 @@ public class RecoveryTests extends OpenSearchIndexLevelReplicationTestCase {
                     public void onFailure(ReplicationState state, ReplicationFailedException e, boolean sendShardFailure) {
                         assertThat(ExceptionsHelper.unwrap(e, IOException.class).getMessage(), equalTo("simulated"));
                     }
-                }, threadPool))
+                }))
             );
             expectThrows(AlreadyClosedException.class, () -> replica.refresh("test"));
             group.removeReplica(replica);

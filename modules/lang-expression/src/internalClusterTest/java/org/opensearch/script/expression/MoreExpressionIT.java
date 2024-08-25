@@ -95,7 +95,7 @@ public class MoreExpressionIT extends ParameterizedStaticSettingsOpenSearchInteg
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singleton(ExpressionModulePlugin.class);
+        return Collections.singleton(ExpressionPlugin.class);
     }
 
     private SearchRequestBuilder buildRequest(String script, Object... params) {

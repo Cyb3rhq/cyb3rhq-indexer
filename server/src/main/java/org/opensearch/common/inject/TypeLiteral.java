@@ -29,7 +29,6 @@
 
 package org.opensearch.common.inject;
 
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.inject.internal.MoreTypes;
 import org.opensearch.common.inject.util.Types;
 
@@ -78,9 +77,8 @@ import static org.opensearch.common.inject.internal.MoreTypes.canonicalize;
  * @author crazybob@google.com (Bob Lee)
  * @author jessewilson@google.com (Jesse Wilson)
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public class TypeLiteral<T> {
 
     final Class<? super T> rawType;

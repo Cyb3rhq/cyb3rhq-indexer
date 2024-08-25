@@ -10,7 +10,7 @@
  */
 
 plugins {
-  id "com.gradle.develocity" version "3.18"
+  id "com.gradle.enterprise" version "3.16.2"
 }
 
 ext.disableBuildCache = hasProperty('DISABLE_BUILD_CACHE') || System.getenv().containsKey('DISABLE_BUILD_CACHE')
@@ -18,10 +18,11 @@ ext.disableBuildCache = hasProperty('DISABLE_BUILD_CACHE') || System.getenv().co
 buildCache {
   local {
     enabled = !disableBuildCache
+    removeUnusedEntriesAfterDays = 14
   }
 }
 
-rootProject.name = "OpenSearch"
+rootProject.name = "Cyb3rhq indexer"
 
 include 'doc-tools'
 includeBuild("doc-tools/missing-doclet")

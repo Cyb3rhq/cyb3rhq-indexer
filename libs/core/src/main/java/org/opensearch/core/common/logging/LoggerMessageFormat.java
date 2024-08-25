@@ -30,13 +30,6 @@
  * GitHub history for details.
  */
 
-/*
- * This code is based on code from SFL4J 1.5.11
- * Copyright (c) 2004-2007 QOS.ch
- * All rights reserved.
- * SPDX-License-Identifier: MIT
- */
-
 package org.opensearch.core.common.logging;
 
 import java.util.HashSet;
@@ -101,34 +94,34 @@ public class LoggerMessageFormat {
                     return messagePattern;
                 } else { // add the tail string which contains no variables and return
                     // the result.
-                    sbuf.append(messagePattern.substring(i));
+                    sbuf.append(messagePattern.substring(i, messagePattern.length()));
                     return sbuf.toString();
                 }
             } else {
                 if (isEscapedDelimiter(messagePattern, j)) {
                     if (!isDoubleEscaped(messagePattern, j)) {
                         L--; // DELIM_START was escaped, thus should not be incremented
-                        sbuf.append(messagePattern, i, j - 1);
+                        sbuf.append(messagePattern.substring(i, j - 1));
                         sbuf.append(DELIM_START);
                         i = j + 1;
                     } else {
                         // The escape character preceding the delimiter start is
                         // itself escaped: "abc x:\\{}"
                         // we have to consume one backward slash
-                        sbuf.append(messagePattern, i, j - 1);
-                        deeplyAppendParameter(sbuf, argArray[L], new HashSet<>());
+                        sbuf.append(messagePattern.substring(i, j - 1));
+                        deeplyAppendParameter(sbuf, argArray[L], new HashSet<Object[]>());
                         i = j + 2;
                     }
                 } else {
                     // normal case
-                    sbuf.append(messagePattern, i, j);
-                    deeplyAppendParameter(sbuf, argArray[L], new HashSet<>());
+                    sbuf.append(messagePattern.substring(i, j));
+                    deeplyAppendParameter(sbuf, argArray[L], new HashSet<Object[]>());
                     i = j + 2;
                 }
             }
         }
         // append the characters following the last {} pair.
-        sbuf.append(messagePattern.substring(i));
+        sbuf.append(messagePattern.substring(i, messagePattern.length()));
         return sbuf.toString();
     }
 
@@ -145,7 +138,11 @@ public class LoggerMessageFormat {
             return false;
         }
         char potentialEscape = messagePattern.charAt(delimiterStartIndex - 1);
-        return potentialEscape == ESCAPE_CHAR;
+        if (potentialEscape == ESCAPE_CHAR) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -156,7 +153,11 @@ public class LoggerMessageFormat {
      *         Always returns false if delimiterStartIndex is less than 2 (edge case)
      */
     static boolean isDoubleEscaped(String messagePattern, int delimiterStartIndex) {
-        return delimiterStartIndex >= 2 && messagePattern.charAt(delimiterStartIndex - 2) == ESCAPE_CHAR;
+        if (delimiterStartIndex >= 2 && messagePattern.charAt(delimiterStartIndex - 2) == ESCAPE_CHAR) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     private static void deeplyAppendParameter(StringBuilder sbuf, Object o, Set<Object[]> seen) {

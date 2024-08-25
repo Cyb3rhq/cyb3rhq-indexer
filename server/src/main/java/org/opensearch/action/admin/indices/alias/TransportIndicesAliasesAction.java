@@ -123,7 +123,7 @@ public class TransportIndicesAliasesAction extends TransportClusterManagerNodeAc
         for (IndicesAliasesRequest.AliasActions aliasAction : request.aliasActions()) {
             Collections.addAll(indices, aliasAction.indices());
         }
-        return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, indices.toArray(new String[0]));
+        return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, indices.toArray(new String[indices.size()]));
     }
 
     @Override
@@ -196,7 +196,7 @@ public class TransportIndicesAliasesAction extends TransportClusterManagerNodeAc
             }
         }
         if (finalActions.isEmpty() && false == actions.isEmpty()) {
-            throw new AliasesNotFoundException(aliases.toArray(new String[0]));
+            throw new AliasesNotFoundException(aliases.toArray(new String[aliases.size()]));
         }
         request.aliasActions().clear();
         IndicesAliasesClusterStateUpdateRequest updateRequest = new IndicesAliasesClusterStateUpdateRequest(unmodifiableList(finalActions))

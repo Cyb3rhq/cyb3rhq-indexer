@@ -13,32 +13,33 @@ import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.BigArrays;
 import org.opensearch.common.util.PageCacheRecycler;
+import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.core.indices.breaker.CircuitBreakerService;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.http.HttpServerTransport;
 import org.opensearch.http.netty4.Netty4HttpServerTransport;
+import org.opensearch.rest.BytesRestResponse;
+import org.opensearch.rest.RestChannel;
+import org.opensearch.rest.RestRequest;
 import org.opensearch.telemetry.tracing.Tracer;
 import org.opensearch.threadpool.ThreadPool;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Map;
 import java.util.function.Supplier;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpRequest;
-import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpMessage;
+import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
 
-public class Netty4BlockingPlugin extends Netty4ModulePlugin {
+public class Netty4BlockingPlugin extends Netty4Plugin {
+
+    private static final AttributeKey<Boolean> SHOULD_BLOCK = AttributeKey.newInstance("should-block");
 
     public class Netty4BlockingHttpServerTransport extends Netty4HttpServerTransport {
 
@@ -93,7 +94,7 @@ public class Netty4BlockingPlugin extends Netty4ModulePlugin {
                 bigArrays,
                 threadPool,
                 xContentRegistry,
-                dispatcher,
+                new BlockingDispatcher(dispatcher),
                 clusterSettings,
                 getSharedGroupFactory(settings),
                 tracer
@@ -108,20 +109,40 @@ public class Netty4BlockingPlugin extends Netty4ModulePlugin {
         public void channelRead0(ChannelHandlerContext ctx, DefaultHttpRequest msg) throws Exception {
             ReferenceCountUtil.retain(msg);
             if (isBlocked(msg)) {
-                ByteBuf buf = Unpooled.copiedBuffer("Hit header_verifier".getBytes(StandardCharsets.UTF_8));
-                final FullHttpResponse response = new DefaultFullHttpResponse(msg.protocolVersion(), HttpResponseStatus.UNAUTHORIZED, buf);
-                ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
-                ReferenceCountUtil.release(msg);
-            } else {
-                // Lets the request pass to the next channel handler
-                ctx.fireChannelRead(msg);
+                msg.headers().add("blocked", true);
             }
+            ctx.fireChannelRead(msg);
         }
 
-        private boolean isBlocked(HttpRequest request) {
+        private boolean isBlocked(HttpMessage request) {
             final boolean shouldBlock = request.headers().contains("blockme");
 
             return shouldBlock;
+        }
+    }
+
+    class BlockingDispatcher implements HttpServerTransport.Dispatcher {
+
+        private HttpServerTransport.Dispatcher originalDispatcher;
+
+        public BlockingDispatcher(final HttpServerTransport.Dispatcher originalDispatcher) {
+            super();
+            this.originalDispatcher = originalDispatcher;
+        }
+
+        @Override
+        public void dispatchRequest(RestRequest request, RestChannel channel, ThreadContext threadContext) {
+            if (request.getHeaders().containsKey("blocked")) {
+                channel.sendResponse(new BytesRestResponse(RestStatus.UNAUTHORIZED, "Hit header_verifier"));
+                return;
+            }
+            originalDispatcher.dispatchRequest(request, channel, threadContext);
+
+        }
+
+        @Override
+        public void dispatchBadRequest(RestChannel channel, ThreadContext threadContext, Throwable cause) {
+            originalDispatcher.dispatchBadRequest(channel, threadContext, cause);
         }
     }
 }

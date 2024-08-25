@@ -32,6 +32,7 @@
 
 package org.opensearch.action.admin.indices.get;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.cluster.metadata.AliasMetadata;
 import org.opensearch.cluster.metadata.MappingMetadata;
@@ -154,12 +155,14 @@ public class GetIndexResponse extends ActionResponse implements ToXContentObject
         }
         defaultSettings = Collections.unmodifiableMap(defaultSettingsMapBuilder);
 
-        final Map<String, String> dataStreamsMapBuilder = new HashMap<>();
-        int dataStreamsSize = in.readVInt();
-        for (int i = 0; i < dataStreamsSize; i++) {
-            dataStreamsMapBuilder.put(in.readString(), in.readOptionalString());
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_8_0)) {
+            final Map<String, String> dataStreamsMapBuilder = new HashMap<>();
+            int dataStreamsSize = in.readVInt();
+            for (int i = 0; i < dataStreamsSize; i++) {
+                dataStreamsMapBuilder.put(in.readString(), in.readOptionalString());
+            }
+            dataStreams = Collections.unmodifiableMap(dataStreamsMapBuilder);
         }
-        dataStreams = Collections.unmodifiableMap(dataStreamsMapBuilder);
     }
 
     public String[] indices() {
@@ -272,10 +275,12 @@ public class GetIndexResponse extends ActionResponse implements ToXContentObject
             out.writeString(indexEntry.getKey());
             Settings.writeSettingsToStream(indexEntry.getValue(), out);
         }
-        out.writeVInt(dataStreams.size());
-        for (final Map.Entry<String, String> indexEntry : dataStreams.entrySet()) {
-            out.writeString(indexEntry.getKey());
-            out.writeOptionalString(indexEntry.getValue());
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_8_0)) {
+            out.writeVInt(dataStreams.size());
+            for (final Map.Entry<String, String> indexEntry : dataStreams.entrySet()) {
+                out.writeString(indexEntry.getKey());
+                out.writeOptionalString(indexEntry.getValue());
+            }
         }
     }
 

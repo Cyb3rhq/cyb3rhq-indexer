@@ -81,7 +81,7 @@ public class RankEvalRequestIT extends ParameterizedStaticSettingsOpenSearchInte
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(RankEvalModulePlugin.class);
+        return Arrays.asList(RankEvalPlugin.class);
     }
 
     @Before
@@ -345,7 +345,7 @@ public class RankEvalRequestIT extends ParameterizedStaticSettingsOpenSearchInte
         request.indicesOptions(IndicesOptions.fromParameters("closed", null, null, "false", SearchRequest.DEFAULT_INDICES_OPTIONS));
         response = client().execute(RankEvalAction.INSTANCE, request).actionGet();
         assertEquals(1, response.getFailures().size());
-        assertThat(response.getFailures().get("amsterdam_query"), instanceOf(IllegalArgumentException.class));
+        assertThat(response.getFailures().get("amsterdam_query"), instanceOf(IndexClosedException.class));
 
         // test allow_no_indices
         request = new RankEvalRequest(task, new String[] { "bad*" });

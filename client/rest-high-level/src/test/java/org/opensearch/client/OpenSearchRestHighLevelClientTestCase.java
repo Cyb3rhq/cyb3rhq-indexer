@@ -32,9 +32,7 @@
 
 package org.opensearch.client;
 
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.opensearch.OpenSearchParseException;
+import org.apache.http.util.EntityUtils;
 import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksRequest;
 import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
 import org.opensearch.action.admin.cluster.node.tasks.list.TaskGroup;
@@ -327,7 +325,7 @@ public abstract class OpenSearchRestHighLevelClientTestCase extends OpenSearchRe
         });
     }
 
-    protected static Map<String, Object> toMap(Response response) throws IOException, OpenSearchParseException, ParseException {
+    protected static Map<String, Object> toMap(Response response) throws IOException {
         return XContentHelper.convertToMap(JsonXContent.jsonXContent, EntityUtils.toString(response.getEntity()), false);
     }
 

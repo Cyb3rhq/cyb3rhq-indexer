@@ -32,7 +32,9 @@
 
 package org.opensearch.cluster.metadata;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchParseException;
+import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
 import org.opensearch.action.support.IndicesOptions;
 import org.opensearch.cluster.ClusterState;
@@ -85,6 +87,7 @@ public class IndexNameExpressionResolver {
 
     public static final String EXCLUDED_DATA_STREAMS_KEY = "opensearch.excluded_ds";
     public static final String SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY = "_system_index_access_allowed";
+    public static final Version SYSTEM_INDEX_ENFORCEMENT_VERSION = LegacyESVersion.V_7_10_0;
 
     private final DateMathExpressionResolver dateMathExpressionResolver = new DateMathExpressionResolver();
     private final WildcardExpressionResolver wildcardExpressionResolver = new WildcardExpressionResolver();
@@ -353,7 +356,7 @@ public class IndexNameExpressionResolver {
             throw infe;
         }
         checkSystemIndexAccess(context, metadata, concreteIndices, indexExpressions);
-        return concreteIndices.toArray(new Index[0]);
+        return concreteIndices.toArray(new Index[concreteIndices.size()]);
     }
 
     private void checkSystemIndexAccess(Context context, Metadata metadata, Set<Index> concreteIndices, String[] originalPatterns) {
@@ -380,13 +383,7 @@ public class IndexNameExpressionResolver {
     private static boolean shouldTrackConcreteIndex(Context context, IndicesOptions options, IndexMetadata index) {
         if (index.getState() == IndexMetadata.State.CLOSE) {
             if (options.forbidClosedIndices() && options.ignoreUnavailable() == false) {
-                if (options.expandWildcardsClosed() == true && options.getExpandWildcards().size() == 1) {
-                    throw new IllegalArgumentException(
-                        "To expand [" + index.getState() + "] wildcard, please set forbid_closed_indices to `false`"
-                    );
-                } else {
-                    throw new IndexClosedException(index.getIndex());
-                }
+                throw new IndexClosedException(index.getIndex());
             } else {
                 return options.forbidClosedIndices() == false && addIndex(index, context);
             }
@@ -601,7 +598,7 @@ public class IndexNameExpressionResolver {
         if (aliases == null) {
             return null;
         }
-        return aliases.toArray(new String[0]);
+        return aliases.toArray(new String[aliases.size()]);
     }
 
     /**

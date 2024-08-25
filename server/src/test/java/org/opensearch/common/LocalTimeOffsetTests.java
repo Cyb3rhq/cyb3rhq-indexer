@@ -302,7 +302,7 @@ public class LocalTimeOffsetTests extends OpenSearchTestCase {
     }
 
     /**
-     * The last "fully defined" transitions in the provided {@linkplain ZoneId}.
+     * The the last "fully defined" transitions in the provided {@linkplain ZoneId}.
      */
     private static ZoneOffsetTransition lastTransitionIn(ZoneId zone) {
         List<ZoneOffsetTransition> transitions = zone.getRules().getTransitions();

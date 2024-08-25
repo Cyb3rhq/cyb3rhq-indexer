@@ -47,7 +47,6 @@ import org.apache.lucene.analysis.en.EnglishPossessiveFilter;
 import org.apache.lucene.analysis.en.KStemFilter;
 import org.apache.lucene.analysis.en.PorterStemFilter;
 import org.apache.lucene.analysis.es.SpanishLightStemFilter;
-import org.apache.lucene.analysis.fa.PersianStemFilter;
 import org.apache.lucene.analysis.fi.FinnishLightStemFilter;
 import org.apache.lucene.analysis.fr.FrenchLightStemFilter;
 import org.apache.lucene.analysis.fr.FrenchMinimalStemFilter;
@@ -240,8 +239,6 @@ public class StemmerTokenFilterFactory extends AbstractTokenFilterFactory {
                 return new NorwegianLightStemFilter(tokenStream, NorwegianLightStemmer.NYNORSK);
             } else if ("minimal_nynorsk".equalsIgnoreCase(language) || "minimalNynorsk".equalsIgnoreCase(language)) {
                 return new NorwegianMinimalStemFilter(tokenStream, NorwegianLightStemmer.NYNORSK);
-            } else if ("persian".equalsIgnoreCase(language)) {
-                return new PersianStemFilter(tokenStream);
 
                 // Portuguese stemmers
             } else if ("portuguese".equalsIgnoreCase(language)) {

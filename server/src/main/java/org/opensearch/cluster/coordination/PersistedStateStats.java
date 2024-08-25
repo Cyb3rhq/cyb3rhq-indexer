@@ -117,10 +117,6 @@ public class PersistedStateStats implements Writeable, ToXContentObject {
         this.extendedFields.put(extendedField, extendedFieldValue);
     }
 
-    public Map<String, AtomicLong> getExtendedFields() {
-        return extendedFields;
-    }
-
     public String getStatsName() {
         return statsName;
     }

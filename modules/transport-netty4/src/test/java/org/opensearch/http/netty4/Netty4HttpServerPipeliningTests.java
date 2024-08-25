@@ -111,7 +111,7 @@ public class Netty4HttpServerPipeliningTests extends OpenSearchTestCase {
                 }
             }
 
-            try (Netty4HttpClient nettyHttpClient = Netty4HttpClient.http()) {
+            try (Netty4HttpClient nettyHttpClient = new Netty4HttpClient()) {
                 Collection<FullHttpResponse> responses = nettyHttpClient.get(transportAddress.address(), requests.toArray(new String[] {}));
                 try {
                     Collection<String> responseBodies = Netty4HttpClient.returnHttpResponseBodies(responses);
@@ -166,12 +166,9 @@ public class Netty4HttpServerPipeliningTests extends OpenSearchTestCase {
         @Override
         protected void initChannel(Channel ch) throws Exception {
             super.initChannel(ch);
+            ch.pipeline().replace("handler", "handler", new PossiblySlowUpstreamHandler(executorService));
         }
 
-        @Override
-        public ChannelHandler getRequestHandler() {
-            return new PossiblySlowUpstreamHandler(executorService);
-        }
     }
 
     class PossiblySlowUpstreamHandler extends SimpleChannelInboundHandler<HttpPipelinedRequest> {

@@ -59,7 +59,6 @@ import org.opensearch.core.indices.breaker.CircuitBreakerStats;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.indices.breaker.HierarchyCircuitBreakerService;
-import org.opensearch.search.SearchService;
 import org.opensearch.search.sort.SortOrder;
 import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
 import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
@@ -78,6 +77,7 @@ import static org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest.M
 import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
 import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
 import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
+import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_KEY;
 import static org.opensearch.search.aggregations.AggregationBuilders.cardinality;
 import static org.opensearch.search.aggregations.AggregationBuilders.terms;
 import static org.opensearch.test.OpenSearchIntegTestCase.Scope.TEST;
@@ -110,7 +110,7 @@ public class CircuitBreakerServiceIT extends ParameterizedStaticSettingsOpenSear
     protected Settings nodeSettings(int nodeOrdinal) {
         return Settings.builder()
             .put(super.nodeSettings(nodeOrdinal))
-            .put(SearchService.CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_KEY, randomIntBetween(1, 2))
+            .put(CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_KEY, randomIntBetween(1, 2))
             .build();
     }
 

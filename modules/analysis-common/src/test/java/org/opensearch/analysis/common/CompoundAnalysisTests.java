@@ -50,12 +50,8 @@ import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.test.IndexSettingsModule;
 import org.opensearch.test.OpenSearchTestCase;
 import org.hamcrest.MatcherAssert;
-import org.junit.Before;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -67,53 +63,23 @@ import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.instanceOf;
 
 public class CompoundAnalysisTests extends OpenSearchTestCase {
-
-    Settings[] settingsArr;
-
-    @Before
-    public void initialize() throws IOException {
-        final Path home = createTempDir();
-        copyHyphenationPatternsFile(home);
-        this.settingsArr = new Settings[] { getJsonSettings(home), getYamlSettings(home) };
-    }
-
     public void testDefaultsCompoundAnalysis() throws Exception {
-        for (Settings settings : this.settingsArr) {
-            IndexSettings idxSettings = IndexSettingsModule.newIndexSettings("test", settings);
-            AnalysisModule analysisModule = createAnalysisModule(settings);
-            TokenFilterFactory filterFactory = analysisModule.getAnalysisRegistry().buildTokenFilterFactories(idxSettings).get("dict_dec");
-            MatcherAssert.assertThat(filterFactory, instanceOf(DictionaryCompoundWordTokenFilterFactory.class));
-        }
+        Settings settings = getJsonSettings();
+        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings("test", settings);
+        AnalysisModule analysisModule = createAnalysisModule(settings);
+        TokenFilterFactory filterFactory = analysisModule.getAnalysisRegistry().buildTokenFilterFactories(idxSettings).get("dict_dec");
+        MatcherAssert.assertThat(filterFactory, instanceOf(DictionaryCompoundWordTokenFilterFactory.class));
     }
 
     public void testDictionaryDecompounder() throws Exception {
-        for (Settings settings : this.settingsArr) {
+        Settings[] settingsArr = new Settings[] { getJsonSettings(), getYamlSettings() };
+        for (Settings settings : settingsArr) {
             List<String> terms = analyze(settings, "decompoundingAnalyzer", "donaudampfschiff spargelcremesuppe");
             MatcherAssert.assertThat(terms.size(), equalTo(8));
             MatcherAssert.assertThat(
                 terms,
                 hasItems("donau", "dampf", "schiff", "donaudampfschiff", "spargel", "creme", "suppe", "spargelcremesuppe")
             );
-        }
-    }
-
-    // Hyphenation Decompounder tests mimic the behavior of lucene tests
-    // lucene/analysis/common/src/test/org/apache/lucene/analysis/compound/TestHyphenationCompoundWordTokenFilterFactory.java
-    public void testHyphenationDecompounder() throws Exception {
-        for (Settings settings : this.settingsArr) {
-            List<String> terms = analyze(settings, "hyphenationAnalyzer", "min veninde som er lidt af en læsehest");
-            MatcherAssert.assertThat(terms.size(), equalTo(10));
-            MatcherAssert.assertThat(terms, hasItems("min", "veninde", "som", "er", "lidt", "af", "en", "læsehest", "læse", "hest"));
-        }
-    }
-
-    // Hyphenation Decompounder tests mimic the behavior of lucene tests
-    // lucene/analysis/common/src/test/org/apache/lucene/analysis/compound/TestHyphenationCompoundWordTokenFilterFactory.java
-    public void testHyphenationDecompounderNoSubMatches() throws Exception {
-        for (Settings settings : this.settingsArr) {
-            List<String> terms = analyze(settings, "hyphenationAnalyzerNoSubMatches", "basketballkurv");
-            MatcherAssert.assertThat(terms.size(), equalTo(3));
-            MatcherAssert.assertThat(terms, hasItems("basketballkurv", "basketball", "kurv"));
         }
     }
 
@@ -136,8 +102,8 @@ public class CompoundAnalysisTests extends OpenSearchTestCase {
     }
 
     private AnalysisModule createAnalysisModule(Settings settings) throws IOException {
-        CommonAnalysisModulePlugin commonAnalysisModulePlugin = new CommonAnalysisModulePlugin();
-        return new AnalysisModule(TestEnvironment.newEnvironment(settings), Arrays.asList(commonAnalysisModulePlugin, new AnalysisPlugin() {
+        CommonAnalysisPlugin commonAnalysisPlugin = new CommonAnalysisPlugin();
+        return new AnalysisModule(TestEnvironment.newEnvironment(settings), Arrays.asList(commonAnalysisPlugin, new AnalysisPlugin() {
             @Override
             public Map<String, AnalysisProvider<TokenFilterFactory>> getTokenFilters() {
                 return singletonMap("myfilter", MyFilterTokenFilterFactory::new);
@@ -145,28 +111,21 @@ public class CompoundAnalysisTests extends OpenSearchTestCase {
         }));
     }
 
-    private void copyHyphenationPatternsFile(Path home) throws IOException {
-        InputStream hyphenation_patterns_path = getClass().getResourceAsStream("da_UTF8.xml");
-        Path config = home.resolve("config");
-        Files.createDirectory(config);
-        Files.copy(hyphenation_patterns_path, config.resolve("da_UTF8.xml"));
-    }
-
-    private Settings getJsonSettings(Path home) throws IOException {
+    private Settings getJsonSettings() throws IOException {
         String json = "/org/opensearch/analysis/common/test1.json";
         return Settings.builder()
             .loadFromStream(json, getClass().getResourceAsStream(json), false)
             .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(Environment.PATH_HOME_SETTING.getKey(), home.toString())
+            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
             .build();
     }
 
-    private Settings getYamlSettings(Path home) throws IOException {
+    private Settings getYamlSettings() throws IOException {
         String yaml = "/org/opensearch/analysis/common/test1.yml";
         return Settings.builder()
             .loadFromStream(yaml, getClass().getResourceAsStream(yaml), false)
             .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(Environment.PATH_HOME_SETTING.getKey(), home.toString())
+            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
             .build();
     }
 }

@@ -35,6 +35,7 @@ package org.opensearch.cluster.metadata;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.CollectionUtil;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.action.AliasesRequest;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.ClusterState.FeatureAware;
@@ -43,7 +44,6 @@ import org.opensearch.cluster.Diffable;
 import org.opensearch.cluster.DiffableUtils;
 import org.opensearch.cluster.NamedDiffable;
 import org.opensearch.cluster.NamedDiffableValueSerializer;
-import org.opensearch.cluster.applicationtemplates.SystemTemplateMetadata;
 import org.opensearch.cluster.block.ClusterBlock;
 import org.opensearch.cluster.block.ClusterBlockLevel;
 import org.opensearch.cluster.coordination.CoordinationMetadata;
@@ -176,11 +176,6 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
     public interface Custom extends NamedDiffable<Custom>, ToXContentFragment, ClusterState.FeatureAware {
 
         EnumSet<XContentContext> context();
-
-        static Custom fromXContent(XContentParser parser, String name) throws IOException {
-            // handling any Exception is caller's responsibility
-            return parser.namedObject(Custom.class, name, null);
-        }
     }
 
     public static final Setting<Integer> DEFAULT_REPLICA_COUNT_SETTING = Setting.intSetting(
@@ -266,7 +261,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
     private final Settings settings;
     private final DiffableStringMap hashesOfConsistentSettings;
     private final Map<String, IndexMetadata> indices;
-    private final TemplatesMetadata templates;
+    private final Map<String, IndexTemplateMetadata> templates;
     private final Map<String, Custom> customs;
 
     private final transient int totalNumberOfShards; // Transient ? not serializable anyway?
@@ -280,8 +275,6 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
     private final String[] visibleClosedIndices;
 
     private final SortedMap<String, IndexAbstraction> indicesLookup;
-
-    private final Map<String, SortedMap<Long, String>> systemTemplatesLookup;
 
     Metadata(
         String clusterUUID,
@@ -300,8 +293,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
         String[] visibleOpenIndices,
         String[] allClosedIndices,
         String[] visibleClosedIndices,
-        SortedMap<String, IndexAbstraction> indicesLookup,
-        Map<String, SortedMap<Long, String>> systemTemplatesLookup
+        SortedMap<String, IndexAbstraction> indicesLookup
     ) {
         this.clusterUUID = clusterUUID;
         this.clusterUUIDCommitted = clusterUUIDCommitted;
@@ -313,7 +305,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
         this.hashesOfConsistentSettings = hashesOfConsistentSettings;
         this.indices = Collections.unmodifiableMap(indices);
         this.customs = Collections.unmodifiableMap(customs);
-        this.templates = new TemplatesMetadata(templates);
+        this.templates = Collections.unmodifiableMap(templates);
         int totalNumberOfShards = 0;
         int totalOpenIndexShards = 0;
         for (IndexMetadata cursor : indices.values()) {
@@ -332,7 +324,6 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
         this.allClosedIndices = allClosedIndices;
         this.visibleClosedIndices = visibleClosedIndices;
         this.indicesLookup = indicesLookup;
-        this.systemTemplatesLookup = systemTemplatesLookup;
     }
 
     public long version() {
@@ -816,25 +807,17 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
     }
 
     public Map<String, IndexTemplateMetadata> templates() {
-        return this.templates.getTemplates();
+        return this.templates;
     }
 
     public Map<String, IndexTemplateMetadata> getTemplates() {
         return templates();
     }
 
-    public TemplatesMetadata templatesMetadata() {
-        return this.templates;
-    }
-
     public Map<String, ComponentTemplate> componentTemplates() {
         return Optional.ofNullable((ComponentTemplateMetadata) this.custom(ComponentTemplateMetadata.TYPE))
             .map(ComponentTemplateMetadata::componentTemplates)
             .orElse(Collections.emptyMap());
-    }
-
-    public Map<String, SortedMap<Long, String>> systemTemplatesLookup() {
-        return systemTemplatesLookup;
     }
 
     public Map<String, ComposableIndexTemplate> templatesV2() {
@@ -846,16 +829,6 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
     public Map<String, DataStream> dataStreams() {
         return Optional.ofNullable((DataStreamMetadata) this.custom(DataStreamMetadata.TYPE))
             .map(DataStreamMetadata::dataStreams)
-            .orElse(Collections.emptyMap());
-    }
-
-    public Map<String, View> views() {
-        return Optional.ofNullable((ViewMetadata) this.custom(ViewMetadata.TYPE)).map(ViewMetadata::views).orElse(Collections.emptyMap());
-    }
-
-    public Map<String, QueryGroup> queryGroups() {
-        return Optional.ofNullable((QueryGroupMetadata) this.custom(QueryGroupMetadata.TYPE))
-            .map(QueryGroupMetadata::queryGroups)
             .orElse(Collections.emptyMap());
     }
 
@@ -951,7 +924,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
     }
 
     public static boolean isGlobalStateEquals(Metadata metadata1, Metadata metadata2) {
-        if (!isCoordinationMetadataEqual(metadata1, metadata2)) {
+        if (!metadata1.coordinationMetadata.equals(metadata2.coordinationMetadata)) {
             return false;
         }
         if (!metadata1.hashesOfConsistentSettings.equals(metadata2.hashesOfConsistentSettings)) {
@@ -970,37 +943,13 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
      * Compares Metadata entities persisted in Remote Store.
      */
     public static boolean isGlobalResourcesMetadataEquals(Metadata metadata1, Metadata metadata2) {
-        if (!isSettingsMetadataEqual(metadata1, metadata2)) {
+        if (!metadata1.persistentSettings.equals(metadata2.persistentSettings)) {
             return false;
         }
-        if (!isTemplatesMetadataEqual(metadata1, metadata2)) {
+        if (!metadata1.templates.equals(metadata2.templates())) {
             return false;
         }
         // Check if any persistent metadata needs to be saved
-        return isCustomMetadataEqual(metadata1, metadata2);
-    }
-
-    public static boolean isCoordinationMetadataEqual(Metadata metadata1, Metadata metadata2) {
-        return metadata1.coordinationMetadata.equals(metadata2.coordinationMetadata);
-    }
-
-    public static boolean isSettingsMetadataEqual(Metadata metadata1, Metadata metadata2) {
-        return metadata1.persistentSettings.equals(metadata2.persistentSettings);
-    }
-
-    public static boolean isTransientSettingsMetadataEqual(Metadata metadata1, Metadata metadata2) {
-        return metadata1.transientSettings.equals(metadata2.transientSettings);
-    }
-
-    public static boolean isTemplatesMetadataEqual(Metadata metadata1, Metadata metadata2) {
-        return metadata1.templates.equals(metadata2.templates);
-    }
-
-    public static boolean isHashesOfConsistentSettingsEqual(Metadata metadata1, Metadata metadata2) {
-        return metadata1.hashesOfConsistentSettings.equals(metadata2.hashesOfConsistentSettings);
-    }
-
-    public static boolean isCustomMetadataEqual(Metadata metadata1, Metadata metadata2) {
         int customCount1 = 0;
         for (Map.Entry<String, Custom> cursor : metadata1.customs.entrySet()) {
             if (cursor.getValue().context().contains(XContentContext.GATEWAY)) {
@@ -1014,7 +963,8 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
                 customCount2++;
             }
         }
-        return customCount1 == customCount2;
+        if (customCount1 != customCount2) return false;
+        return true;
     }
 
     @Override
@@ -1063,11 +1013,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
             persistentSettings = after.persistentSettings;
             hashesOfConsistentSettings = after.hashesOfConsistentSettings.diff(before.hashesOfConsistentSettings);
             indices = DiffableUtils.diff(before.indices, after.indices, DiffableUtils.getStringKeySerializer());
-            templates = DiffableUtils.diff(
-                before.templates.getTemplates(),
-                after.templates.getTemplates(),
-                DiffableUtils.getStringKeySerializer()
-            );
+            templates = DiffableUtils.diff(before.templates, after.templates, DiffableUtils.getStringKeySerializer());
             customs = DiffableUtils.diff(before.customs, after.customs, DiffableUtils.getStringKeySerializer(), CUSTOM_VALUE_SERIALIZER);
         }
 
@@ -1078,12 +1024,22 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
 
         MetadataDiff(StreamInput in) throws IOException {
             clusterUUID = in.readString();
-            clusterUUIDCommitted = in.readBoolean();
+            if (in.getVersion().onOrAfter(LegacyESVersion.V_7_0_0)) {
+                clusterUUIDCommitted = in.readBoolean();
+            }
             version = in.readLong();
-            coordinationMetadata = new CoordinationMetadata(in);
+            if (in.getVersion().onOrAfter(LegacyESVersion.V_7_0_0)) {
+                coordinationMetadata = new CoordinationMetadata(in);
+            } else {
+                coordinationMetadata = CoordinationMetadata.EMPTY_METADATA;
+            }
             transientSettings = Settings.readSettingsFromStream(in);
             persistentSettings = Settings.readSettingsFromStream(in);
-            hashesOfConsistentSettings = DiffableStringMap.readDiffFrom(in);
+            if (in.getVersion().onOrAfter(LegacyESVersion.V_7_3_0)) {
+                hashesOfConsistentSettings = DiffableStringMap.readDiffFrom(in);
+            } else {
+                hashesOfConsistentSettings = DiffableStringMap.DiffableStringMapDiff.EMPTY;
+            }
             indices = DiffableUtils.readJdkMapDiff(in, DiffableUtils.getStringKeySerializer(), INDEX_METADATA_DIFF_VALUE_READER);
             templates = DiffableUtils.readJdkMapDiff(in, DiffableUtils.getStringKeySerializer(), TEMPLATES_DIFF_VALUE_READER);
             customs = DiffableUtils.readJdkMapDiff(in, DiffableUtils.getStringKeySerializer(), CUSTOM_VALUE_SERIALIZER);
@@ -1092,12 +1048,18 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             out.writeString(clusterUUID);
-            out.writeBoolean(clusterUUIDCommitted);
+            if (out.getVersion().onOrAfter(LegacyESVersion.V_7_0_0)) {
+                out.writeBoolean(clusterUUIDCommitted);
+            }
             out.writeLong(version);
-            coordinationMetadata.writeTo(out);
+            if (out.getVersion().onOrAfter(LegacyESVersion.V_7_0_0)) {
+                coordinationMetadata.writeTo(out);
+            }
             Settings.writeSettingsToStream(transientSettings, out);
             Settings.writeSettingsToStream(persistentSettings, out);
-            hashesOfConsistentSettings.writeTo(out);
+            if (out.getVersion().onOrAfter(LegacyESVersion.V_7_3_0)) {
+                hashesOfConsistentSettings.writeTo(out);
+            }
             indices.writeTo(out);
             templates.writeTo(out);
             customs.writeTo(out);
@@ -1114,7 +1076,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
             builder.persistentSettings(persistentSettings);
             builder.hashesOfConsistentSettings(hashesOfConsistentSettings.apply(part.hashesOfConsistentSettings));
             builder.indices(indices.apply(part.indices));
-            builder.templates(templates.apply(part.templates.getTemplates()));
+            builder.templates(templates.apply(part.templates));
             builder.customs(customs.apply(part.customs));
             return builder.build();
         }
@@ -1124,11 +1086,17 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
         Builder builder = new Builder();
         builder.version = in.readLong();
         builder.clusterUUID = in.readString();
-        builder.clusterUUIDCommitted = in.readBoolean();
-        builder.coordinationMetadata(new CoordinationMetadata(in));
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_0_0)) {
+            builder.clusterUUIDCommitted = in.readBoolean();
+        }
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_0_0)) {
+            builder.coordinationMetadata(new CoordinationMetadata(in));
+        }
         builder.transientSettings(readSettingsFromStream(in));
         builder.persistentSettings(readSettingsFromStream(in));
-        builder.hashesOfConsistentSettings(DiffableStringMap.readFrom(in));
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_3_0)) {
+            builder.hashesOfConsistentSettings(DiffableStringMap.readFrom(in));
+        }
         int size = in.readVInt();
         for (int i = 0; i < size; i++) {
             builder.put(IndexMetadata.readFrom(in), false);
@@ -1149,16 +1117,25 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
     public void writeTo(StreamOutput out) throws IOException {
         out.writeLong(version);
         out.writeString(clusterUUID);
-        out.writeBoolean(clusterUUIDCommitted);
-        coordinationMetadata.writeTo(out);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_0_0)) {
+            out.writeBoolean(clusterUUIDCommitted);
+        }
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_0_0)) {
+            coordinationMetadata.writeTo(out);
+        }
         writeSettingsToStream(transientSettings, out);
         writeSettingsToStream(persistentSettings, out);
-        hashesOfConsistentSettings.writeTo(out);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_3_0)) {
+            hashesOfConsistentSettings.writeTo(out);
+        }
         out.writeVInt(indices.size());
         for (IndexMetadata indexMetadata : this) {
             indexMetadata.writeTo(out);
         }
-        templates.writeTo(out);
+        out.writeVInt(templates.size());
+        for (final IndexTemplateMetadata cursor : templates.values()) {
+            cursor.writeTo(out);
+        }
         // filter out custom states not supported by the other node
         int numberOfCustoms = 0;
         for (final Custom cursor : customs.values()) {
@@ -1204,8 +1181,6 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
         private final Map<String, Custom> customs;
         private final Metadata previousMetadata;
 
-        private Map<String, SortedMap<Long, String>> systemTemplatesLookup;
-
         public Builder() {
             clusterUUID = UNKNOWN_CLUSTER_UUID;
             indices = new HashMap<>();
@@ -1224,7 +1199,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
             this.hashesOfConsistentSettings = metadata.hashesOfConsistentSettings;
             this.version = metadata.version;
             this.indices = new HashMap<>(metadata.indices);
-            this.templates = new HashMap<>(metadata.templates.getTemplates());
+            this.templates = new HashMap<>(metadata.templates);
             this.customs = new HashMap<>(metadata.customs);
             this.previousMetadata = metadata;
         }
@@ -1303,12 +1278,6 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
             return this;
         }
 
-        public Builder templates(TemplatesMetadata templatesMetadata) {
-            this.templates.clear();
-            this.templates.putAll(templatesMetadata.getTemplates());
-            return this;
-        }
-
         public Builder put(String name, ComponentTemplate componentTemplate) {
             Objects.requireNonNull(componentTemplate, "it is invalid to add a null component template: " + name);
             Map<String, ComponentTemplate> existingTemplates = Optional.ofNullable(
@@ -1383,62 +1352,6 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
             existingDataStreams.remove(name);
             this.customs.put(DataStreamMetadata.TYPE, new DataStreamMetadata(existingDataStreams));
             return this;
-        }
-
-        public Builder queryGroups(final Map<String, QueryGroup> queryGroups) {
-            this.customs.put(QueryGroupMetadata.TYPE, new QueryGroupMetadata(queryGroups));
-            return this;
-        }
-
-        public Builder put(final QueryGroup queryGroup) {
-            Objects.requireNonNull(queryGroup, "queryGroup should not be null");
-            Map<String, QueryGroup> existing = new HashMap<>(getQueryGroups());
-            existing.put(queryGroup.get_id(), queryGroup);
-            return queryGroups(existing);
-        }
-
-        public Builder remove(final QueryGroup queryGroup) {
-            Objects.requireNonNull(queryGroup, "queryGroup should not be null");
-            Map<String, QueryGroup> existing = new HashMap<>(getQueryGroups());
-            existing.remove(queryGroup.get_id());
-            return queryGroups(existing);
-        }
-
-        private Map<String, QueryGroup> getQueryGroups() {
-            return Optional.ofNullable(this.customs.get(QueryGroupMetadata.TYPE))
-                .map(o -> (QueryGroupMetadata) o)
-                .map(QueryGroupMetadata::queryGroups)
-                .orElse(Collections.emptyMap());
-        }
-
-        private Map<String, View> getViews() {
-            return Optional.ofNullable(customs.get(ViewMetadata.TYPE))
-                .map(o -> (ViewMetadata) o)
-                .map(vmd -> vmd.views())
-                .orElse(new HashMap<>());
-        }
-
-        public View view(final String viewName) {
-            return getViews().get(viewName);
-        }
-
-        public Builder views(final Map<String, View> views) {
-            this.customs.put(ViewMetadata.TYPE, new ViewMetadata(views));
-            return this;
-        }
-
-        public Builder put(final View view) {
-            Objects.requireNonNull(view, "view cannot be null");
-            final var replacementViews = new HashMap<>(getViews());
-            replacementViews.put(view.getName(), view);
-            return views(replacementViews);
-        }
-
-        public Builder removeView(final String viewName) {
-            Objects.requireNonNull(viewName, "viewName cannot be null");
-            final var replacementViews = new HashMap<>(getViews());
-            replacementViews.remove(viewName);
-            return views(replacementViews);
         }
 
         public Custom getCustom(String type) {
@@ -1578,8 +1491,6 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
                 ? (DataStreamMetadata) this.previousMetadata.customs.get(DataStreamMetadata.TYPE)
                 : null;
 
-            buildSystemTemplatesLookup();
-
             boolean recomputeRequiredforIndicesLookups = (previousMetadata == null)
                 || (indices.equals(previousMetadata.indices) == false)
                 || (previousDataStreamMetadata != null && previousDataStreamMetadata.equals(dataStreamMetadata) == false)
@@ -1588,33 +1499,6 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
             return (recomputeRequiredforIndicesLookups == false)
                 ? buildMetadataWithPreviousIndicesLookups()
                 : buildMetadataWithRecomputedIndicesLookups();
-        }
-
-        private void buildSystemTemplatesLookup() {
-            if (previousMetadata != null
-                && Objects.equals(
-                    previousMetadata.customs.get(ComponentTemplateMetadata.TYPE),
-                    this.customs.get(ComponentTemplateMetadata.TYPE)
-                )) {
-                systemTemplatesLookup = Collections.unmodifiableMap(previousMetadata.systemTemplatesLookup);
-            } else {
-                systemTemplatesLookup = new HashMap<>();
-                Optional.ofNullable((ComponentTemplateMetadata) this.customs.get(ComponentTemplateMetadata.TYPE))
-                    .map(ComponentTemplateMetadata::componentTemplates)
-                    .orElseGet(Collections::emptyMap)
-                    .forEach((k, v) -> {
-                        if (MetadataIndexTemplateService.isSystemTemplate(v)) {
-                            SystemTemplateMetadata templateMetadata = SystemTemplateMetadata.fromComponentTemplate(k);
-                            systemTemplatesLookup.compute(templateMetadata.name(), (ik, iv) -> {
-                                if (iv == null) {
-                                    iv = new TreeMap<>();
-                                }
-                                iv.put(templateMetadata.version(), k);
-                                return iv;
-                            });
-                        }
-                    });
-            }
         }
 
         protected Metadata buildMetadataWithPreviousIndicesLookups() {
@@ -1635,8 +1519,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
                 Arrays.copyOf(previousMetadata.visibleOpenIndices, previousMetadata.visibleOpenIndices.length),
                 Arrays.copyOf(previousMetadata.allClosedIndices, previousMetadata.allClosedIndices.length),
                 Arrays.copyOf(previousMetadata.visibleClosedIndices, previousMetadata.visibleClosedIndices.length),
-                Collections.unmodifiableSortedMap(previousMetadata.indicesLookup),
-                systemTemplatesLookup
+                Collections.unmodifiableSortedMap(previousMetadata.indicesLookup)
             );
         }
 
@@ -1759,8 +1642,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
                 visibleOpenIndicesArray,
                 allClosedIndicesArray,
                 visibleClosedIndicesArray,
-                indicesLookup,
-                systemTemplatesLookup
+                indicesLookup
             );
         }
 
@@ -1837,7 +1719,9 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
             if (dsMetadata != null) {
                 for (DataStream ds : dsMetadata.dataStreams().values()) {
                     String prefix = DataStream.BACKING_INDEX_PREFIX + ds.getName() + "-";
-                    Set<String> conflicts = indicesLookup.subMap(prefix, DataStream.BACKING_INDEX_PREFIX + ds.getName() + ".")
+                    Set<String> conflicts = indicesLookup.subMap(prefix, DataStream.BACKING_INDEX_PREFIX + ds.getName() + ".") // '.' is the
+                                                                                                                               // char after
+                                                                                                                               // '-'
                         .keySet()
                         .stream()
                         .filter(s -> NUMBER_PATTERN.matcher(s.substring(prefix.length())).matches())
@@ -1884,7 +1768,9 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
             }
 
             builder.startObject("templates");
-            metadata.templatesMetadata().toXContent(builder, params);
+            for (final IndexTemplateMetadata cursor : metadata.templates().values()) {
+                IndexTemplateMetadata.Builder.toXContentWithTypes(cursor, builder, params);
+            }
             builder.endObject();
 
             if (context == XContentContext.API) {
@@ -1947,10 +1833,12 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
                     } else if ("hashes_of_consistent_settings".equals(currentFieldName)) {
                         builder.hashesOfConsistentSettings(parser.mapStrings());
                     } else if ("templates".equals(currentFieldName)) {
-                        builder.templates(TemplatesMetadata.fromXContent(parser));
+                        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                            builder.put(IndexTemplateMetadata.Builder.fromXContent(parser, parser.currentName()));
+                        }
                     } else {
                         try {
-                            Custom custom = Custom.fromXContent(parser, currentFieldName);
+                            Custom custom = parser.namedObject(Custom.class, currentFieldName, null);
                             builder.putCustom(custom.getWriteableName(), custom);
                         } catch (NamedObjectNotFoundException ex) {
                             logger.warn("Skipping unknown custom object with type {}", currentFieldName);

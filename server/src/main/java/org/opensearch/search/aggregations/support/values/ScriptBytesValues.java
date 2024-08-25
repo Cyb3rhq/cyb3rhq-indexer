@@ -32,7 +32,6 @@
 package org.opensearch.search.aggregations.support.values;
 
 import org.apache.lucene.search.Scorable;
-import org.apache.lucene.util.BytesRef;
 import org.opensearch.common.lucene.ScorerAware;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.index.fielddata.SortedBinaryDocValues;
@@ -62,11 +61,7 @@ public class ScriptBytesValues extends SortingBinaryDocValues implements ScorerA
             values[i].clear();
         } else {
             CollectionUtils.ensureNoSelfReferences(o, "ScriptBytesValues value");
-            if (o instanceof BytesRef) {
-                values[i].copyBytes((BytesRef) o);
-            } else {
-                values[i].copyChars(o.toString());
-            }
+            values[i].copyChars(o.toString());
         }
     }
 

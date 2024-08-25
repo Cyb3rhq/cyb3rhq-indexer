@@ -17,7 +17,6 @@ import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.stats.IndexingPressurePerShardStats;
 import org.opensearch.index.stats.IndexingPressureStats;
-import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class ShardIndexingPressureTests extends OpenSearchTestCase {
@@ -31,7 +30,7 @@ public class ShardIndexingPressureTests extends OpenSearchTestCase {
         .build();
 
     final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-    final ClusterService clusterService = ClusterServiceUtils.createClusterService(settings, clusterSettings, null);
+    final ClusterService clusterService = new ClusterService(settings, clusterSettings, null);
 
     public void testMemoryBytesMarkedAndReleased() {
         ShardIndexingPressure shardIndexingPressure = new ShardIndexingPressure(settings, clusterService);

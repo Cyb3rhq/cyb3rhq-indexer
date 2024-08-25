@@ -57,7 +57,7 @@ import java.util.Set;
 import static java.util.Collections.emptyMap;
 
 /**
- * Orchestrator class for source lookups. Not thread safe.
+ * Orchestrator class for source lookups
  *
  * @opensearch.api
  */

@@ -29,8 +29,6 @@
 
 package org.opensearch.common.inject;
 
-import org.opensearch.common.annotation.PublicApi;
-
 import java.util.List;
 
 /**
@@ -56,9 +54,8 @@ import java.util.List;
  * @author crazybob@google.com (Bob Lee)
  * @author jessewilson@google.com (Jesse Wilson)
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public interface Injector {
 
     /**

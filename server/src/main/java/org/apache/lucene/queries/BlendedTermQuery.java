@@ -120,7 +120,6 @@ public abstract class BlendedTermQuery extends Query {
         }
         int max = 0;
         long minSumTTF = Long.MAX_VALUE;
-        int[] docCounts = new int[contexts.length];
         for (int i = 0; i < contexts.length; i++) {
             TermStates ctx = contexts[i];
             int df = ctx.docFreq();
@@ -134,7 +133,6 @@ public abstract class BlendedTermQuery extends Query {
                 // we need to find out the minimum sumTTF to adjust the statistics
                 // otherwise the statistics don't match
                 minSumTTF = Math.min(minSumTTF, reader.getSumTotalTermFreq(terms[i].field()));
-                docCounts[i] = reader.getDocCount(terms[i].field());
             }
         }
         if (maxDoc > minSumTTF) {
@@ -177,11 +175,7 @@ public abstract class BlendedTermQuery extends Query {
             if (prev > current) {
                 actualDf++;
             }
-            // Per field, we want to guarantee that the adjusted df does not exceed the number of docs with the field.
-            // That is, in the IDF formula (log(1 + (N - n + 0.5) / (n + 0.5))), we need to make sure that n (the
-            // adjusted df) is never bigger than N (the number of docs with the field).
-            int fieldMaxDoc = Math.min(maxDoc, docCounts[i]);
-            contexts[i] = ctx = adjustDF(reader.getContext(), ctx, Math.min(fieldMaxDoc, actualDf));
+            contexts[i] = ctx = adjustDF(reader.getContext(), ctx, Math.min(maxDoc, actualDf));
             prev = current;
             sumTTF += ctx.totalTermFreq();
         }

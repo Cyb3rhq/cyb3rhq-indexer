@@ -201,7 +201,7 @@ public class SortBuilderTests extends OpenSearchTestCase {
                 assertEquals(iterator.next(), parsedBuilder);
             }
             if (expectedWarningHeaders.size() > 0) {
-                assertWarnings(expectedWarningHeaders.toArray(new String[0]));
+                assertWarnings(expectedWarningHeaders.toArray(new String[expectedWarningHeaders.size()]));
                 assertedWarnings.addAll(expectedWarningHeaders);
             }
         }

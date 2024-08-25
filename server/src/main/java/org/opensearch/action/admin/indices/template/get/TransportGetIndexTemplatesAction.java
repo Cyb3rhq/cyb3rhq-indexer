@@ -76,8 +76,7 @@ public class TransportGetIndexTemplatesAction extends TransportClusterManagerNod
             threadPool,
             actionFilters,
             GetIndexTemplatesRequest::new,
-            indexNameExpressionResolver,
-            true
+            indexNameExpressionResolver
         );
     }
 

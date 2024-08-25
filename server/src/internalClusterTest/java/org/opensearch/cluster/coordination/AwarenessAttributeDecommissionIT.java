@@ -539,7 +539,18 @@ public class AwarenessAttributeDecommissionIT extends OpenSearchIntegTestCase {
             assertEquals(originalClusterManager, currentClusterManager);
         }
 
-        deleteDecommissionStateAndWaitForStableCluster(currentClusterManager, 15);
+        // Will wait for all events to complete
+        client(activeNode).admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).get();
+
+        // Recommissioning the zone back to gracefully succeed the test once above tests succeeds
+        DeleteDecommissionStateResponse deleteDecommissionStateResponse = client(currentClusterManager).execute(
+            DeleteDecommissionStateAction.INSTANCE,
+            new DeleteDecommissionStateRequest()
+        ).get();
+        assertTrue(deleteDecommissionStateResponse.isAcknowledged());
+
+        // will wait for cluster to stabilise with a timeout of 2 min as by then all nodes should have joined the cluster
+        ensureStableCluster(15, TimeValue.timeValueMinutes(2));
     }
 
     public void testDecommissionFailedWhenDifferentAttributeAlreadyDecommissioned() throws Exception {
@@ -606,7 +617,18 @@ public class AwarenessAttributeDecommissionIT extends OpenSearchIntegTestCase {
             )
         );
 
-        deleteDecommissionStateAndWaitForStableCluster(node_in_c, 6);
+        // Will wait for all events to complete
+        client(node_in_c).admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).get();
+
+        // Recommissioning the zone back to gracefully succeed the test once above tests succeeds
+        DeleteDecommissionStateResponse deleteDecommissionStateResponse = client(node_in_c).execute(
+            DeleteDecommissionStateAction.INSTANCE,
+            new DeleteDecommissionStateRequest()
+        ).get();
+        assertTrue(deleteDecommissionStateResponse.isAcknowledged());
+
+        // will wait for cluster to stabilise with a timeout of 2 min as by then all nodes should have joined the cluster
+        ensureStableCluster(6, TimeValue.timeValueMinutes(2));
     }
 
     public void testDecommissionStatusUpdatePublishedToAllNodes() throws ExecutionException, InterruptedException {
@@ -726,7 +748,20 @@ public class AwarenessAttributeDecommissionIT extends OpenSearchIntegTestCase {
         );
         logger.info("--> Verified the decommissioned node has in_progress state.");
 
-        deleteDecommissionStateAndWaitForStableCluster(activeNode, 6);
+        // Will wait for all events to complete
+        client(activeNode).admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).get();
+        logger.info("--> Got LANGUID event");
+        // Recommissioning the zone back to gracefully succeed the test once above tests succeeds
+        DeleteDecommissionStateResponse deleteDecommissionStateResponse = client(activeNode).execute(
+            DeleteDecommissionStateAction.INSTANCE,
+            new DeleteDecommissionStateRequest()
+        ).get();
+        assertTrue(deleteDecommissionStateResponse.isAcknowledged());
+        logger.info("--> Deleting decommission done.");
+
+        // will wait for cluster to stabilise with a timeout of 2 min (findPeerInterval for decommissioned nodes)
+        // as by then all nodes should have joined the cluster
+        ensureStableCluster(6, TimeValue.timeValueSeconds(121));
     }
 
     public void testDecommissionFailedWhenAttributeNotWeighedAway() throws Exception {
@@ -948,7 +983,15 @@ public class AwarenessAttributeDecommissionIT extends OpenSearchIntegTestCase {
         assertEquals(clusterState.nodes().getDataNodes().size(), 3);
         assertEquals(clusterState.nodes().getClusterManagerNodes().size(), 2);
 
-        deleteDecommissionStateAndWaitForStableCluster(dataNodes.get(0), 6);
+        // Recommissioning the zone back to gracefully succeed the test once above tests succeeds
+        DeleteDecommissionStateResponse deleteDecommissionStateResponse = client(dataNodes.get(0)).execute(
+            DeleteDecommissionStateAction.INSTANCE,
+            new DeleteDecommissionStateRequest()
+        ).get();
+        assertTrue(deleteDecommissionStateResponse.isAcknowledged());
+
+        // will wait for cluster to stabilise with a timeout of 2 min as by then all nodes should have joined the cluster
+        ensureStableCluster(6, TimeValue.timeValueMinutes(2));
     }
 
     public void testConcurrentDecommissionAction() throws Exception {
@@ -976,7 +1019,7 @@ public class AwarenessAttributeDecommissionIT extends OpenSearchIntegTestCase {
                 .build()
         );
         logger.info("--> start 3 data nodes on zones 'a' & 'b' & 'c'");
-        final String bZoneDataNode = internalCluster().startNodes(
+        internalCluster().startNodes(
             Settings.builder()
                 .put(commonSettings)
                 .put("node.attr.zone", "a")
@@ -992,7 +1035,7 @@ public class AwarenessAttributeDecommissionIT extends OpenSearchIntegTestCase {
                 .put("node.attr.zone", "c")
                 .put(onlyRole(commonSettings, DiscoveryNodeRole.DATA_ROLE))
                 .build()
-        ).get(1);
+        );
 
         ensureStableCluster(6);
         ClusterHealthResponse health = client().admin()
@@ -1057,25 +1100,6 @@ public class AwarenessAttributeDecommissionIT extends OpenSearchIntegTestCase {
         assertEquals(concurrentRuns, numRequestAcknowledged.get() + numRequestUnAcknowledged.get() + numRequestFailed.get());
         assertEquals(concurrentRuns - 1, numRequestFailed.get());
         assertEquals(1, numRequestAcknowledged.get() + numRequestUnAcknowledged.get());
-
-        deleteDecommissionStateAndWaitForStableCluster(bZoneDataNode, 6);
-    }
-
-    private void deleteDecommissionStateAndWaitForStableCluster(String activeNodeName, int expectedClusterSize) throws ExecutionException,
-        InterruptedException {
-        client(activeNodeName).admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).get();
-
-        // Recommissioning the zone back to gracefully succeed the test once above tests succeeds
-        DeleteDecommissionStateResponse deleteDecommissionStateResponse = client(activeNodeName).execute(
-            DeleteDecommissionStateAction.INSTANCE,
-            new DeleteDecommissionStateRequest()
-        ).get();
-        assertTrue(deleteDecommissionStateResponse.isAcknowledged());
-        logger.info("--> Deleting decommission done.");
-
-        // will wait for cluster to stabilise with a timeout of 2 min (findPeerInterval for decommissioned nodes)
-        // as by then all nodes should have joined the cluster
-        ensureStableCluster(expectedClusterSize, TimeValue.timeValueSeconds(121));
     }
 
     private static class WaitForFailedDecommissionState implements ClusterStateObserver.Listener {

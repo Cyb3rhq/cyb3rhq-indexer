@@ -40,7 +40,6 @@ import org.opensearch.common.settings.IndexScopedSettings;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Setting.Property;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsException;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.core.common.unit.ByteSizeValue;
@@ -613,8 +612,8 @@ public class IndexSettingsTests extends OpenSearchTestCase {
 
         {
             // validation should fail since we are not ignoring private settings
-            final SettingsException e = expectThrows(
-                SettingsException.class,
+            final IllegalArgumentException e = expectThrows(
+                IllegalArgumentException.class,
                 () -> indexScopedSettings.validate(settings, randomBoolean())
             );
             assertThat(e, hasToString(containsString("unknown setting [index.creation_date]")));
@@ -622,8 +621,8 @@ public class IndexSettingsTests extends OpenSearchTestCase {
 
         {
             // validation should fail since we are not ignoring private settings
-            final SettingsException e = expectThrows(
-                SettingsException.class,
+            final IllegalArgumentException e = expectThrows(
+                IllegalArgumentException.class,
                 () -> indexScopedSettings.validate(settings, randomBoolean(), false, randomBoolean())
             );
             assertThat(e, hasToString(containsString("unknown setting [index.creation_date]")));
@@ -641,8 +640,8 @@ public class IndexSettingsTests extends OpenSearchTestCase {
 
         {
             // validation should fail since we are not ignoring archived settings
-            final SettingsException e = expectThrows(
-                SettingsException.class,
+            final IllegalArgumentException e = expectThrows(
+                IllegalArgumentException.class,
                 () -> indexScopedSettings.validate(settings, randomBoolean())
             );
             assertThat(e, hasToString(containsString("unknown setting [archived.foo]")));
@@ -650,8 +649,8 @@ public class IndexSettingsTests extends OpenSearchTestCase {
 
         {
             // validation should fail since we are not ignoring archived settings
-            final SettingsException e = expectThrows(
-                SettingsException.class,
+            final IllegalArgumentException e = expectThrows(
+                IllegalArgumentException.class,
                 () -> indexScopedSettings.validate(settings, randomBoolean(), randomBoolean(), false)
             );
             assertThat(e, hasToString(containsString("unknown setting [archived.foo]")));
@@ -718,8 +717,8 @@ public class IndexSettingsTests extends OpenSearchTestCase {
 
     public void testUpdateSoftDeletesFails() {
         IndexScopedSettings settings = new IndexScopedSettings(Settings.EMPTY, IndexScopedSettings.BUILT_IN_INDEX_SETTINGS);
-        SettingsException error = expectThrows(
-            SettingsException.class,
+        IllegalArgumentException error = expectThrows(
+            IllegalArgumentException.class,
             () -> settings.updateSettings(
                 Settings.builder().put("index.soft_deletes.enabled", randomBoolean()).build(),
                 Settings.builder(),
@@ -733,7 +732,7 @@ public class IndexSettingsTests extends OpenSearchTestCase {
     public void testSoftDeletesDefaultSetting() {
         // enabled by default on 7.0+ or later
         {
-            Version createdVersion = VersionUtils.randomVersionBetween(random(), Version.V_2_0_0, Version.CURRENT);
+            Version createdVersion = VersionUtils.randomVersionBetween(random(), Version.V_1_0_0, Version.CURRENT);
             Settings settings = Settings.builder().put(IndexMetadata.SETTING_INDEX_VERSION_CREATED.getKey(), createdVersion).build();
             assertTrue(IndexSettings.INDEX_SOFT_DELETES_SETTING.get(settings));
         }
@@ -741,7 +740,7 @@ public class IndexSettingsTests extends OpenSearchTestCase {
 
     public void testIgnoreTranslogRetentionSettingsIfSoftDeletesEnabled() {
         Settings.Builder settings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, VersionUtils.randomVersionBetween(random(), Version.V_2_0_0, Version.CURRENT));
+            .put(IndexMetadata.SETTING_VERSION_CREATED, VersionUtils.randomVersionBetween(random(), Version.V_1_0_0, Version.CURRENT));
         if (randomBoolean()) {
             settings.put(IndexSettings.INDEX_TRANSLOG_RETENTION_AGE_SETTING.getKey(), randomPositiveTimeValue());
         }
@@ -1052,16 +1051,5 @@ public class IndexSettingsTests extends OpenSearchTestCase {
         );
         settings.updateIndexMetadata(metadata);
         assertEquals("foo", settings.getDefaultSearchPipeline());
-    }
-
-    public void testIsOnRemoteNode() {
-        Version version = VersionUtils.getPreviousVersion();
-        Settings theSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, version)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "0xdeadbeef")
-            .build();
-        Settings nodeSettings = Settings.builder().put("node.attr.remote_store.translog.repository", "my-repo-1").build();
-        IndexSettings settings = newIndexSettings(newIndexMeta("index", theSettings), nodeSettings);
-        assertTrue("Index should be on remote node", settings.isAssignedOnRemoteNode());
     }
 }

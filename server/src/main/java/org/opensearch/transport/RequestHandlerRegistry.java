@@ -32,7 +32,6 @@
 
 package org.opensearch.transport;
 
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.lease.Releasables;
 import org.opensearch.common.util.concurrent.ThreadContext;
@@ -48,9 +47,8 @@ import java.io.IOException;
 /**
  * Registry for OpenSearch RequestHandlers
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public final class RequestHandlerRegistry<Request extends TransportRequest> {
 
     private final String action;

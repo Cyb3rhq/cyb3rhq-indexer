@@ -39,6 +39,7 @@ import org.apache.lucene.util.CollectionUtil;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.Rounding;
 import org.opensearch.common.lease.Releasables;
+import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.aggregations.Aggregator;
 import org.opensearch.search.aggregations.AggregatorFactories;
@@ -48,8 +49,7 @@ import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.search.aggregations.LeafBucketCollector;
 import org.opensearch.search.aggregations.LeafBucketCollectorBase;
 import org.opensearch.search.aggregations.bucket.BucketsAggregator;
-import org.opensearch.search.aggregations.bucket.filterrewrite.DateHistogramAggregatorBridge;
-import org.opensearch.search.aggregations.bucket.filterrewrite.FilterRewriteOptimizationContext;
+import org.opensearch.search.aggregations.bucket.FastFilterRewriteHelper;
 import org.opensearch.search.aggregations.bucket.terms.LongKeyedBucketOrds;
 import org.opensearch.search.aggregations.support.ValuesSource;
 import org.opensearch.search.aggregations.support.ValuesSourceConfig;
@@ -59,9 +59,6 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.function.BiConsumer;
-import java.util.function.Function;
-
-import static org.opensearch.search.aggregations.bucket.filterrewrite.DateHistogramAggregatorBridge.segmentMatchAll;
 
 /**
  * An aggregator for date values. Every date is rounded down using a configured
@@ -86,7 +83,7 @@ class DateHistogramAggregator extends BucketsAggregator implements SizedBucketAg
     private final LongBounds hardBounds;
     private final LongKeyedBucketOrds bucketOrds;
 
-    private final FilterRewriteOptimizationContext filterRewriteOptimizationContext;
+    private final FastFilterRewriteHelper.FastFilterContext fastFilterContext;
 
     DateHistogramAggregator(
         String name,
@@ -119,38 +116,35 @@ class DateHistogramAggregator extends BucketsAggregator implements SizedBucketAg
 
         bucketOrds = LongKeyedBucketOrds.build(context.bigArrays(), cardinality);
 
-        DateHistogramAggregatorBridge bridge = new DateHistogramAggregatorBridge() {
-            @Override
-            protected boolean canOptimize() {
-                return canOptimize(valuesSourceConfig);
-            }
+        fastFilterContext = new FastFilterRewriteHelper.FastFilterContext(context);
+        fastFilterContext.setAggregationType(
+            new DateHistogramAggregationType(
+                valuesSourceConfig.fieldType(),
+                valuesSourceConfig.missing() != null,
+                valuesSourceConfig.script() != null,
+                hardBounds
+            )
+        );
+        if (fastFilterContext.isRewriteable(parent, subAggregators.length)) {
+            fastFilterContext.buildFastFilter();
+        }
+    }
 
-            @Override
-            protected void prepare() throws IOException {
-                buildRanges(context);
-            }
+    private class DateHistogramAggregationType extends FastFilterRewriteHelper.AbstractDateHistogramAggregationType {
 
-            @Override
-            protected Rounding getRounding(long low, long high) {
-                return rounding;
-            }
+        public DateHistogramAggregationType(MappedFieldType fieldType, boolean missing, boolean hasScript, LongBounds hardBounds) {
+            super(fieldType, missing, hasScript, hardBounds);
+        }
 
-            @Override
-            protected Rounding.Prepared getRoundingPrepared() {
-                return preparedRounding;
-            }
+        @Override
+        protected Rounding getRounding(long low, long high) {
+            return rounding;
+        }
 
-            @Override
-            protected long[] processHardBounds(long[] bounds) {
-                return super.processHardBounds(bounds, hardBounds);
-            }
-
-            @Override
-            protected Function<Long, Long> bucketOrdProducer() {
-                return (key) -> bucketOrds.add(0, preparedRounding.round((long) key));
-            }
-        };
-        filterRewriteOptimizationContext = new FilterRewriteOptimizationContext(bridge, parent, subAggregators.length, context);
+        @Override
+        protected Rounding.Prepared getRoundingPrepared() {
+            return preparedRounding;
+        }
     }
 
     @Override
@@ -167,7 +161,14 @@ class DateHistogramAggregator extends BucketsAggregator implements SizedBucketAg
             return LeafBucketCollector.NO_OP_COLLECTOR;
         }
 
-        boolean optimized = filterRewriteOptimizationContext.tryOptimize(ctx, this::incrementBucketDocCount, segmentMatchAll(context, ctx));
+        boolean optimized = FastFilterRewriteHelper.tryFastFilterAggregation(
+            ctx,
+            fastFilterContext,
+            (key, count) -> incrementBucketDocCount(
+                FastFilterRewriteHelper.getBucketOrd(bucketOrds.add(0, preparedRounding.round(key))),
+                count
+            )
+        );
         if (optimized) throw new CollectionTerminatedException();
 
         SortedNumericDocValues values = valuesSource.longValues(ctx);
@@ -254,7 +255,6 @@ class DateHistogramAggregator extends BucketsAggregator implements SizedBucketAg
     @Override
     public void collectDebugInfo(BiConsumer<String, Object> add) {
         add.accept("total_buckets", bucketOrds.size());
-        filterRewriteOptimizationContext.populateDebugInfo(add);
     }
 
     /**

@@ -29,24 +29,24 @@ case "$1" in
     # Debian ####################################################
     install|upgrade)
 
-        # Create opensearch group if not existing
-        if ! getent group opensearch > /dev/null 2>&1 ; then
-            echo -n "Creating opensearch group..."
-            addgroup --quiet --system opensearch
+        # Create cyb3rhq-indexer group if not existing
+        if ! getent group cyb3rhq-indexer > /dev/null 2>&1 ; then
+            echo -n "Creating cyb3rhq-indexer group..."
+            addgroup --quiet --system cyb3rhq-indexer
             echo " OK"
         fi
 
-        # Create opensearch user if not existing
-        if ! id opensearch > /dev/null 2>&1 ; then
-            echo -n "Creating opensearch user..."
+        # Create cyb3rhq-indexer user if not existing
+        if ! id cyb3rhq-indexer > /dev/null 2>&1 ; then
+            echo -n "Creating cyb3rhq-indexer user..."
             adduser --quiet \
                     --system \
                     --no-create-home \
                     --home /nonexistent \
-                    --ingroup opensearch \
+                    --ingroup cyb3rhq-indexer \
                     --disabled-password \
                     --shell /bin/false \
-                    opensearch
+                    cyb3rhq-indexer
             echo " OK"
         fi
     ;;
@@ -56,23 +56,23 @@ case "$1" in
     # RedHat ####################################################
     1|2)
 
-        # Create opensearch group if not existing
-        if ! getent group opensearch > /dev/null 2>&1 ; then
-            echo -n "Creating opensearch group..."
-            groupadd -r opensearch
+        # Create cyb3rhq-indexer group if not existing
+        if ! getent group cyb3rhq-indexer > /dev/null 2>&1 ; then
+            echo -n "Creating cyb3rhq-indexer group..."
+            groupadd -r cyb3rhq-indexer
             echo " OK"
         fi
 
-        # Create opensearch user if not existing
-        if ! id opensearch > /dev/null 2>&1 ; then
-            echo -n "Creating opensearch user..."
+        # Create cyb3rhq-indexer user if not existing
+        if ! id cyb3rhq-indexer > /dev/null 2>&1 ; then
+            echo -n "Creating cyb3rhq-indexer user..."
             useradd --system \
                     --no-create-home \
                     --home-dir /nonexistent \
-                    --gid opensearch \
+                    --gid cyb3rhq-indexer \
                     --shell /sbin/nologin \
-                    --comment "opensearch user" \
-                    opensearch
+                    --comment "cyb3rhq-indexer user" \
+                    cyb3rhq-indexer
             echo " OK"
         fi
     ;;

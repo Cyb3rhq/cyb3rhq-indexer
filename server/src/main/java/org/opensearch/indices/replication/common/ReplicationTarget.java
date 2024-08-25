@@ -91,7 +91,7 @@ public abstract class ReplicationTarget extends AbstractRefCounted {
         // make sure the store is not released until we are done.
         this.cancellableThreads = new CancellableThreads();
         store.incRef();
-        if (indexShard.indexSettings().isAssignedOnRemoteNode()) {
+        if (indexShard.indexSettings().isRemoteStoreEnabled()) {
             indexShard.remoteStore().incRef();
         }
     }
@@ -158,7 +158,7 @@ public abstract class ReplicationTarget extends AbstractRefCounted {
     public void cancel(String reason) {
         if (finished.compareAndSet(false, true)) {
             try {
-                logger.debug("replication/recovery cancelled (reason: [{}])", reason);
+                logger.debug("replication cancelled (reason: [{}])", reason);
                 onCancel(reason);
             } finally {
                 // release the initial reference. replication files will be cleaned as soon as ref count goes to zero, potentially now
@@ -284,7 +284,7 @@ public abstract class ReplicationTarget extends AbstractRefCounted {
         try {
             store.decRef();
         } finally {
-            if (indexShard.indexSettings().isAssignedOnRemoteNode()) {
+            if (indexShard.indexSettings().isRemoteStoreEnabled()) {
                 indexShard.remoteStore().decRef();
             }
         }

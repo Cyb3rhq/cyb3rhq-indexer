@@ -166,4 +166,7 @@ public class MultiTermsIT extends BaseStringTermsTestCase {
         assertThat(bucket.getDocCount(), equalTo(2L));
     }
 
+    private MultiTermsValuesSourceConfig field(String name) {
+        return new MultiTermsValuesSourceConfig.Builder().setFieldName(name).build();
+    }
 }

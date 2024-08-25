@@ -174,7 +174,7 @@ public abstract class MapperTestCase extends MapperServiceTestCase {
         }
     }
 
-    public void testEmptyName() {
+    public final void testEmptyName() {
         MapperParsingException e = expectThrows(MapperParsingException.class, () -> createMapperService(mapping(b -> {
             b.startObject("");
             minimalMapping(b);

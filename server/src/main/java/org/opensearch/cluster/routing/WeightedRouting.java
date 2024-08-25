@@ -14,7 +14,6 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -26,26 +25,27 @@ import java.util.Objects;
  */
 @PublicApi(since = "2.4.0")
 public class WeightedRouting implements Writeable {
-    private final String attributeName;
-    private final Map<String, Double> weights;
-    private final int hashCode;
+    private String attributeName;
+    private Map<String, Double> weights;
 
     public WeightedRouting() {
-        this("", new HashMap<>(3));
+        this.attributeName = "";
+        this.weights = new HashMap<>(3);
     }
 
     public WeightedRouting(String attributeName, Map<String, Double> weights) {
         this.attributeName = attributeName;
-        this.weights = Collections.unmodifiableMap(weights);
-        this.hashCode = Objects.hash(this.attributeName, this.weights);
+        this.weights = weights;
     }
 
     public WeightedRouting(WeightedRouting weightedRouting) {
-        this(weightedRouting.attributeName(), weightedRouting.weights);
+        this.attributeName = weightedRouting.attributeName();
+        this.weights = weightedRouting.weights;
     }
 
     public WeightedRouting(StreamInput in) throws IOException {
-        this(in.readString(), (Map<String, Double>) in.readGenericValue());
+        attributeName = in.readString();
+        weights = (Map<String, Double>) in.readGenericValue();
     }
 
     public boolean isSet() {
@@ -70,7 +70,7 @@ public class WeightedRouting implements Writeable {
 
     @Override
     public int hashCode() {
-        return hashCode;
+        return Objects.hash(attributeName, weights);
     }
 
     @Override

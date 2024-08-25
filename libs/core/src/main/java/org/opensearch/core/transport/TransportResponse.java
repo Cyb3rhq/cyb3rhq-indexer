@@ -32,7 +32,6 @@
 
 package org.opensearch.core.transport;
 
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 
@@ -41,9 +40,8 @@ import java.io.IOException;
 /**
  * Response over the transport interface
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public abstract class TransportResponse extends TransportMessage {
 
     /**

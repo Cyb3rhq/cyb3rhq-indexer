@@ -58,9 +58,8 @@ import java.util.function.Predicate;
 /**
  * OpenSearch Transport Interface
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public interface Transport extends LifecycleComponent {
 
     /**
@@ -167,10 +166,7 @@ public interface Transport extends LifecycleComponent {
     /**
      * This class represents a response context that encapsulates the actual response handler, the action and the connection it was
      * executed on.
-     *
-     * @opensearch.api
      */
-    @PublicApi(since = "1.0.0")
     final class ResponseContext<T extends TransportResponse> {
 
         private final TransportResponseHandler<T> handler;
@@ -200,10 +196,7 @@ public interface Transport extends LifecycleComponent {
 
     /**
      * This class is a registry that allows
-     *
-     * @opensearch.api
      */
-    @PublicApi(since = "1.0.0")
     final class ResponseHandlers {
         private final ConcurrentMapLong<ResponseContext<? extends TransportResponse>> handlers = ConcurrentCollections
             .newConcurrentMapLongWithAggressiveConcurrency();
@@ -283,9 +276,8 @@ public interface Transport extends LifecycleComponent {
     /**
      * Request handler implementations
      *
-     * @opensearch.api
+     * @opensearch.internal
      */
-    @PublicApi(since = "1.0.0")
     final class RequestHandlers {
 
         private volatile Map<String, RequestHandlerRegistry<? extends TransportRequest>> requestHandlers = Collections.emptyMap();

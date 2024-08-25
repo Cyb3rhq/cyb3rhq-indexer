@@ -37,6 +37,7 @@ import org.opensearch.common.NamedRegistry;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.geo.GeoShapeType;
 import org.opensearch.common.geo.ShapesAvailability;
+import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.ParseFieldRegistry;
 import org.opensearch.core.ParseField;
@@ -211,14 +212,21 @@ import org.opensearch.search.aggregations.metrics.TopHitsAggregationBuilder;
 import org.opensearch.search.aggregations.metrics.ValueCountAggregationBuilder;
 import org.opensearch.search.aggregations.metrics.WeightedAvgAggregationBuilder;
 import org.opensearch.search.aggregations.pipeline.AvgBucketPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.AvgBucketPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.BucketScriptPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.BucketScriptPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.BucketSelectorPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.BucketSelectorPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.BucketSortPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.BucketSortPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.CumulativeSumPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.CumulativeSumPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.DerivativePipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.DerivativePipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.EwmaModel;
 import org.opensearch.search.aggregations.pipeline.ExtendedStatsBucketParser;
 import org.opensearch.search.aggregations.pipeline.ExtendedStatsBucketPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.ExtendedStatsBucketPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.HoltLinearModel;
 import org.opensearch.search.aggregations.pipeline.HoltWintersModel;
 import org.opensearch.search.aggregations.pipeline.InternalBucketMetricValue;
@@ -229,15 +237,24 @@ import org.opensearch.search.aggregations.pipeline.InternalSimpleValue;
 import org.opensearch.search.aggregations.pipeline.InternalStatsBucket;
 import org.opensearch.search.aggregations.pipeline.LinearModel;
 import org.opensearch.search.aggregations.pipeline.MaxBucketPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.MaxBucketPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.MinBucketPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.MinBucketPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.MovAvgModel;
 import org.opensearch.search.aggregations.pipeline.MovAvgPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.MovAvgPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.MovFnPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.MovFnPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.PercentilesBucketPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.PercentilesBucketPipelineAggregator;
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.SerialDiffPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.SerialDiffPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.SimpleModel;
 import org.opensearch.search.aggregations.pipeline.StatsBucketPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.StatsBucketPipelineAggregator;
 import org.opensearch.search.aggregations.pipeline.SumBucketPipelineAggregationBuilder;
+import org.opensearch.search.aggregations.pipeline.SumBucketPipelineAggregator;
 import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
 import org.opensearch.search.fetch.FetchPhase;
 import org.opensearch.search.fetch.FetchSubPhase;
@@ -301,6 +318,13 @@ import static org.opensearch.threadpool.ThreadPool.Names.INDEX_SEARCHER;
  * @opensearch.internal
  */
 public class SearchModule {
+    public static final Setting<Integer> INDICES_MAX_CLAUSE_COUNT_SETTING = Setting.intSetting(
+        "indices.query.bool.max_clause_count",
+        1024,
+        1,
+        Integer.MAX_VALUE,
+        Setting.Property.NodeScope
+    );
 
     private final Map<String, Highlighter> highlighters;
     private final ParseFieldRegistry<MovAvgModel.AbstractModelParser> movingAverageModelParserRegistry = new ParseFieldRegistry<>(
@@ -690,6 +714,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 DerivativePipelineAggregationBuilder.NAME,
                 DerivativePipelineAggregationBuilder::new,
+                DerivativePipelineAggregator::new,
                 DerivativePipelineAggregationBuilder::parse
             ).addResultReader(InternalDerivative::new)
         );
@@ -697,6 +722,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 MaxBucketPipelineAggregationBuilder.NAME,
                 MaxBucketPipelineAggregationBuilder::new,
+                MaxBucketPipelineAggregator::new,
                 MaxBucketPipelineAggregationBuilder.PARSER
             )
                 // This bucket is used by many pipeline aggreations.
@@ -706,6 +732,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 MinBucketPipelineAggregationBuilder.NAME,
                 MinBucketPipelineAggregationBuilder::new,
+                MinBucketPipelineAggregator::new,
                 MinBucketPipelineAggregationBuilder.PARSER
             )
             /* Uses InternalBucketMetricValue */
@@ -714,6 +741,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 AvgBucketPipelineAggregationBuilder.NAME,
                 AvgBucketPipelineAggregationBuilder::new,
+                AvgBucketPipelineAggregator::new,
                 AvgBucketPipelineAggregationBuilder.PARSER
             )
                 // This bucket is used by many pipeline aggreations.
@@ -723,6 +751,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 SumBucketPipelineAggregationBuilder.NAME,
                 SumBucketPipelineAggregationBuilder::new,
+                SumBucketPipelineAggregator::new,
                 SumBucketPipelineAggregationBuilder.PARSER
             )
             /* Uses InternalSimpleValue */
@@ -731,6 +760,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 StatsBucketPipelineAggregationBuilder.NAME,
                 StatsBucketPipelineAggregationBuilder::new,
+                StatsBucketPipelineAggregator::new,
                 StatsBucketPipelineAggregationBuilder.PARSER
             ).addResultReader(InternalStatsBucket::new)
         );
@@ -738,6 +768,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 ExtendedStatsBucketPipelineAggregationBuilder.NAME,
                 ExtendedStatsBucketPipelineAggregationBuilder::new,
+                ExtendedStatsBucketPipelineAggregator::new,
                 new ExtendedStatsBucketParser()
             ).addResultReader(InternalExtendedStatsBucket::new)
         );
@@ -745,6 +776,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 PercentilesBucketPipelineAggregationBuilder.NAME,
                 PercentilesBucketPipelineAggregationBuilder::new,
+                PercentilesBucketPipelineAggregator::new,
                 PercentilesBucketPipelineAggregationBuilder.PARSER
             ).addResultReader(InternalPercentilesBucket::new)
         );
@@ -752,6 +784,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 MovAvgPipelineAggregationBuilder.NAME,
                 MovAvgPipelineAggregationBuilder::new,
+                MovAvgPipelineAggregator::new,
                 (XContentParser parser, String name) -> MovAvgPipelineAggregationBuilder.parse(
                     movingAverageModelParserRegistry,
                     name,
@@ -763,6 +796,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 CumulativeSumPipelineAggregationBuilder.NAME,
                 CumulativeSumPipelineAggregationBuilder::new,
+                CumulativeSumPipelineAggregator::new,
                 CumulativeSumPipelineAggregationBuilder.PARSER
             )
         );
@@ -770,6 +804,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 BucketScriptPipelineAggregationBuilder.NAME,
                 BucketScriptPipelineAggregationBuilder::new,
+                BucketScriptPipelineAggregator::new,
                 BucketScriptPipelineAggregationBuilder.PARSER
             )
         );
@@ -777,6 +812,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 BucketSelectorPipelineAggregationBuilder.NAME,
                 BucketSelectorPipelineAggregationBuilder::new,
+                BucketSelectorPipelineAggregator::new,
                 BucketSelectorPipelineAggregationBuilder::parse
             )
         );
@@ -784,6 +820,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 BucketSortPipelineAggregationBuilder.NAME,
                 BucketSortPipelineAggregationBuilder::new,
+                BucketSortPipelineAggregator::new,
                 BucketSortPipelineAggregationBuilder::parse
             )
         );
@@ -791,6 +828,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 SerialDiffPipelineAggregationBuilder.NAME,
                 SerialDiffPipelineAggregationBuilder::new,
+                SerialDiffPipelineAggregator::new,
                 SerialDiffPipelineAggregationBuilder::parse
             )
         );
@@ -798,6 +836,7 @@ public class SearchModule {
             new PipelineAggregationSpec(
                 MovFnPipelineAggregationBuilder.NAME,
                 MovFnPipelineAggregationBuilder::new,
+                MovFnPipelineAggregator::new,
                 MovFnPipelineAggregationBuilder.PARSER
             )
         );
@@ -812,6 +851,11 @@ public class SearchModule {
         namedWriteables.add(
             new NamedWriteableRegistry.Entry(PipelineAggregationBuilder.class, spec.getName().getPreferredName(), spec.getReader())
         );
+        if (spec.getAggregatorReader() != null) {
+            namedWriteables.add(
+                new NamedWriteableRegistry.Entry(PipelineAggregator.class, spec.getName().getPreferredName(), spec.getAggregatorReader())
+            );
+        }
         for (Map.Entry<String, Writeable.Reader<? extends InternalAggregation>> resultReader : spec.getResultReaders().entrySet()) {
             namedWriteables.add(
                 new NamedWriteableRegistry.Entry(InternalAggregation.class, resultReader.getKey(), resultReader.getValue())
@@ -1086,6 +1130,7 @@ public class SearchModule {
         registerQuery(new QuerySpec<>(MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new, MatchAllQueryBuilder::fromXContent));
         registerQuery(new QuerySpec<>(QueryStringQueryBuilder.NAME, QueryStringQueryBuilder::new, QueryStringQueryBuilder::fromXContent));
         registerQuery(new QuerySpec<>(BoostingQueryBuilder.NAME, BoostingQueryBuilder::new, BoostingQueryBuilder::fromXContent));
+        BooleanQuery.setMaxClauseCount(INDICES_MAX_CLAUSE_COUNT_SETTING.get(settings));
         registerQuery(new QuerySpec<>(BoolQueryBuilder.NAME, BoolQueryBuilder::new, BoolQueryBuilder::fromXContent));
         registerQuery(new QuerySpec<>(TermQueryBuilder.NAME, TermQueryBuilder::new, TermQueryBuilder::fromXContent));
         registerQuery(new QuerySpec<>(TermsQueryBuilder.NAME, TermsQueryBuilder::new, TermsQueryBuilder::fromXContent));

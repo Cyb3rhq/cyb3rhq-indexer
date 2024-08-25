@@ -71,9 +71,4 @@ public class WriteOnlyTranslogManager extends InternalTranslogManager {
     public void skipTranslogRecovery() {
         // Do nothing.
     }
-
-    @Override
-    public Translog.Snapshot newChangesSnapshot(long fromSeqNo, long toSeqNo, boolean requiredFullRange) throws IOException {
-        throw new UnsupportedOperationException("Translog snapshot unsupported with no-op translogs");
-    }
 }

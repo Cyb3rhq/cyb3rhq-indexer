@@ -37,6 +37,7 @@ import org.opensearch.action.admin.cluster.node.tasks.cancel.TransportCancelTask
 import org.opensearch.action.admin.cluster.node.tasks.get.TransportGetTaskAction;
 import org.opensearch.action.admin.cluster.node.tasks.list.TransportListTasksAction;
 import org.opensearch.action.support.ActionFilters;
+import org.opensearch.action.support.nodes.BaseNodeRequest;
 import org.opensearch.action.support.nodes.BaseNodeResponse;
 import org.opensearch.action.support.nodes.BaseNodesRequest;
 import org.opensearch.action.support.nodes.BaseNodesResponse;
@@ -69,7 +70,6 @@ import org.opensearch.test.tasks.MockTaskManager;
 import org.opensearch.threadpool.RunnableTaskExecutionListener;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportRequest;
 import org.opensearch.transport.TransportService;
 import org.opensearch.transport.nio.MockNioTransport;
 import org.junit.After;
@@ -161,8 +161,8 @@ public abstract class TaskManagerTestCase extends OpenSearchTestCase {
     /**
      * Simulates node-based task that can be used to block node tasks so they are guaranteed to be registered by task manager
      */
-    abstract class AbstractTestNodesAction<NodesRequest extends BaseNodesRequest<NodesRequest>, NodeRequest extends TransportRequest>
-        extends TransportNodesAction<NodesRequest, NodesResponse, NodeRequest, NodeResponse> {
+    abstract class AbstractTestNodesAction<NodesRequest extends BaseNodesRequest<NodesRequest>, NodeRequest extends BaseNodeRequest> extends
+        TransportNodesAction<NodesRequest, NodesResponse, NodeRequest, NodeResponse> {
 
         AbstractTestNodesAction(
             String actionName,

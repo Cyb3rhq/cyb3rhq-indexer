@@ -32,6 +32,7 @@
 
 package org.opensearch.action.fieldcaps;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.Strings;
@@ -127,7 +128,11 @@ public class FieldCapabilities implements Writeable, ToXContentObject {
         this.indices = in.readOptionalStringArray();
         this.nonSearchableIndices = in.readOptionalStringArray();
         this.nonAggregatableIndices = in.readOptionalStringArray();
-        this.meta = in.readMap(StreamInput::readString, i -> i.readSet(StreamInput::readString));
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_6_0)) {
+            meta = in.readMap(StreamInput::readString, i -> i.readSet(StreamInput::readString));
+        } else {
+            meta = Collections.emptyMap();
+        }
     }
 
     @Override
@@ -139,7 +144,9 @@ public class FieldCapabilities implements Writeable, ToXContentObject {
         out.writeOptionalStringArray(indices);
         out.writeOptionalStringArray(nonSearchableIndices);
         out.writeOptionalStringArray(nonAggregatableIndices);
-        out.writeMap(meta, StreamOutput::writeString, (o, set) -> o.writeCollection(set, StreamOutput::writeString));
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_6_0)) {
+            out.writeMap(meta, StreamOutput::writeString, (o, set) -> o.writeCollection(set, StreamOutput::writeString));
+        }
     }
 
     @Override

@@ -33,6 +33,7 @@
 package org.opensearch.geo.search.aggregations.bucket.composite;
 
 import org.apache.lucene.index.IndexReader;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.common.geo.GeoBoundingBox;
 import org.opensearch.common.geo.GeoPoint;
 import org.opensearch.common.util.BigArrays;
@@ -174,7 +175,9 @@ public class GeoTileGridValuesSourceBuilder extends CompositeValuesSourceBuilder
     public GeoTileGridValuesSourceBuilder(StreamInput in) throws IOException {
         super(in);
         this.precision = in.readInt();
-        this.geoBoundingBox = new GeoBoundingBox(in);
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_6_0)) {
+            this.geoBoundingBox = new GeoBoundingBox(in);
+        }
     }
 
     public GeoTileGridValuesSourceBuilder precision(int precision) {
@@ -195,7 +198,9 @@ public class GeoTileGridValuesSourceBuilder extends CompositeValuesSourceBuilder
     @Override
     protected void innerWriteTo(StreamOutput out) throws IOException {
         out.writeInt(precision);
-        geoBoundingBox.writeTo(out);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_6_0)) {
+            geoBoundingBox.writeTo(out);
+        }
     }
 
     @Override

@@ -28,7 +28,6 @@ import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.codec.http2.HttpConversionUtil;
 import io.netty.util.ReferenceCounted;
 
 import static org.hamcrest.CoreMatchers.containsString;
@@ -56,10 +55,9 @@ public class Netty4HeaderVerifierIT extends OpenSearchNetty4IntegTestCase {
         final FullHttpRequest blockedRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
         blockedRequest.headers().add("blockme", "Not Allowed");
         blockedRequest.headers().add(HOST, "localhost");
-        blockedRequest.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), "http");
 
         final List<FullHttpResponse> responses = new ArrayList<>();
-        try (Netty4HttpClient nettyHttpClient = Netty4HttpClient.http2()) {
+        try (Netty4HttpClient nettyHttpClient = new Netty4HttpClient()) {
             try {
                 FullHttpResponse blockedResponse = nettyHttpClient.send(transportAddress.address(), blockedRequest);
                 responses.add(blockedResponse);

@@ -16,6 +16,7 @@ import org.apache.lucene.search.MatchAllDocsQuery;
 import org.opensearch.common.geo.GeoPoint;
 import org.opensearch.geo.GeoModulePlugin;
 import org.opensearch.geo.search.aggregations.bucket.geogrid.GeoTileGridAggregationBuilder;
+import org.opensearch.geo.search.aggregations.bucket.geogrid.GeoTileGridAggregator;
 import org.opensearch.index.mapper.GeoPointFieldMapper;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.search.aggregations.bucket.GeoTileUtils;
@@ -30,7 +31,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Testing the geo tile grid as part of CompositeAggregation.
+ * Testing the {@link GeoTileGridAggregator} as part of CompositeAggregation.
  */
 public class GeoTileGridAggregationCompositeAggregatorTests extends BaseCompositeAggregatorTestCase {
 

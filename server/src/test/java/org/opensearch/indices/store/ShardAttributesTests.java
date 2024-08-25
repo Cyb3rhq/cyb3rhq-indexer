@@ -28,12 +28,13 @@ public class ShardAttributesTests extends OpenSearchTestCase {
     String customDataPath = "/path/to/data";
 
     public void testShardAttributesConstructor() {
-        ShardAttributes attributes = new ShardAttributes(customDataPath);
+        ShardAttributes attributes = new ShardAttributes(shardId, customDataPath);
+        assertEquals(attributes.getShardId(), shardId);
         assertEquals(attributes.getCustomDataPath(), customDataPath);
     }
 
     public void testSerialization() throws IOException {
-        ShardAttributes attributes1 = new ShardAttributes(customDataPath);
+        ShardAttributes attributes1 = new ShardAttributes(shardId, customDataPath);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         StreamOutput output = new DataOutputStreamOutput(new DataOutputStream(bytes));
         attributes1.writeTo(output);
@@ -41,6 +42,7 @@ public class ShardAttributesTests extends OpenSearchTestCase {
         StreamInput input = new InputStreamStreamInput(new ByteArrayInputStream(bytes.toByteArray()));
         ShardAttributes attributes2 = new ShardAttributes(input);
         input.close();
+        assertEquals(attributes1.getShardId(), attributes2.getShardId());
         assertEquals(attributes1.getCustomDataPath(), attributes2.getCustomDataPath());
     }
 

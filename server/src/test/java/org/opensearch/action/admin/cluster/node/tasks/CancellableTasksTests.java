@@ -41,6 +41,7 @@ import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksResponse
 import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksRequest;
 import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
 import org.opensearch.action.support.ActionTestUtils;
+import org.opensearch.action.support.nodes.BaseNodeRequest;
 import org.opensearch.action.support.nodes.BaseNodesRequest;
 import org.opensearch.action.support.replication.ClusterStateCreationUtils;
 import org.opensearch.cluster.node.DiscoveryNode;
@@ -56,7 +57,6 @@ import org.opensearch.tasks.Task;
 import org.opensearch.tasks.TaskInfo;
 import org.opensearch.tasks.TaskManager;
 import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportRequest;
 import org.opensearch.transport.TransportService;
 
 import java.io.IOException;
@@ -81,7 +81,7 @@ import static org.hamcrest.Matchers.startsWith;
 
 public class CancellableTasksTests extends TaskManagerTestCase {
 
-    public static class CancellableNodeRequest extends TransportRequest {
+    public static class CancellableNodeRequest extends BaseNodeRequest {
         protected String requestName;
 
         public CancellableNodeRequest() {
@@ -428,7 +428,7 @@ public class CancellableTasksTests extends TaskManagerTestCase {
         );
         assertThat(cancelledException.getMessage(), startsWith("Task cancelled before it started:"));
         CountDownLatch latch = new CountDownLatch(1);
-        taskManager.startBanOnChildrenNodes(parentTaskId.getId(), latch::countDown, cancelledException.getMessage());
+        taskManager.startBanOnChildrenNodes(parentTaskId.getId(), latch::countDown);
         assertTrue("onChildTasksCompleted() is not invoked", latch.await(1, TimeUnit.SECONDS));
     }
 

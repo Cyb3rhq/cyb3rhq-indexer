@@ -32,6 +32,7 @@
 
 package org.opensearch.action.admin.indices.shards;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchException;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.common.annotation.PublicApi;
@@ -250,8 +251,13 @@ public class IndicesShardStoresResponse extends ActionResponse implements ToXCon
         }
 
         private Failure(StreamInput in) throws IOException {
+            if (in.getVersion().before(LegacyESVersion.V_7_4_0)) {
+                nodeId = in.readString();
+            }
             readFrom(in, this);
-            nodeId = in.readString();
+            if (in.getVersion().onOrAfter(LegacyESVersion.V_7_4_0)) {
+                nodeId = in.readString();
+            }
         }
 
         public String nodeId() {
@@ -264,8 +270,13 @@ public class IndicesShardStoresResponse extends ActionResponse implements ToXCon
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
+            if (out.getVersion().before(LegacyESVersion.V_7_4_0)) {
+                out.writeString(nodeId);
+            }
             super.writeTo(out);
-            out.writeString(nodeId);
+            if (out.getVersion().onOrAfter(LegacyESVersion.V_7_4_0)) {
+                out.writeString(nodeId);
+            }
         }
 
         @Override

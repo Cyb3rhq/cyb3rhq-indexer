@@ -35,7 +35,6 @@ package org.opensearch.cluster.coordination;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.cluster.ClusterManagerMetrics;
 import org.opensearch.cluster.coordination.Coordinator.Mode;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodes;
@@ -128,7 +127,6 @@ public class FollowersChecker {
     private final TransportService transportService;
     private final NodeHealthService nodeHealthService;
     private volatile FastResponseState fastResponseState;
-    private ClusterManagerMetrics clusterManagerMetrics;
 
     public FollowersChecker(
         Settings settings,
@@ -136,8 +134,7 @@ public class FollowersChecker {
         TransportService transportService,
         Consumer<FollowerCheckRequest> handleRequestAndUpdateState,
         BiConsumer<DiscoveryNode, String> onNodeFailure,
-        NodeHealthService nodeHealthService,
-        ClusterManagerMetrics clusterManagerMetrics
+        NodeHealthService nodeHealthService
     ) {
         this.settings = settings;
         this.transportService = transportService;
@@ -164,7 +161,6 @@ public class FollowersChecker {
                 handleDisconnectedNode(node);
             }
         });
-        this.clusterManagerMetrics = clusterManagerMetrics;
     }
 
     private void setFollowerCheckTimeout(TimeValue followerCheckTimeout) {
@@ -417,7 +413,6 @@ public class FollowersChecker {
         }
 
         void failNode(String reason) {
-            clusterManagerMetrics.incrementCounter(clusterManagerMetrics.followerChecksFailureCounter, 1.0);
             transportService.getThreadPool().generic().execute(new Runnable() {
                 @Override
                 public void run() {

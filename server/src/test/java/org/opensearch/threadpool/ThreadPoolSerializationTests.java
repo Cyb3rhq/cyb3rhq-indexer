@@ -141,9 +141,6 @@ public class ThreadPoolSerializationTests extends OpenSearchTestCase {
         StreamInput input = output.bytes().streamInput();
         ThreadPool.Info newInfo = new ThreadPool.Info(input);
 
-        /* The SerDe patch converts RESIZABLE threadpool type value to FIXED. Implementing
-         * the same conversion in test to maintain parity.
-         */
         assertThat(newInfo.getThreadPoolType(), is(threadPoolType));
     }
 }

@@ -32,6 +32,7 @@
 
 package org.opensearch.action.get;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.Version;
 import org.opensearch.action.ActionRequest;
@@ -117,6 +118,9 @@ public class MultiGetRequest extends ActionRequest
             }
             id = in.readString();
             routing = in.readOptionalString();
+            if (in.getVersion().before(LegacyESVersion.V_7_0_0)) {
+                in.readOptionalString(); // _parent
+            }
             storedFields = in.readOptionalStringArray();
             version = in.readLong();
             versionType = VersionType.fromValue(in.readByte());
@@ -211,6 +215,9 @@ public class MultiGetRequest extends ActionRequest
             }
             out.writeString(id);
             out.writeOptionalString(routing);
+            if (out.getVersion().before(LegacyESVersion.V_7_0_0)) {
+                out.writeOptionalString(null); // _parent
+            }
             out.writeOptionalStringArray(storedFields);
             out.writeLong(version);
             out.writeByte(versionType.getValue());
@@ -514,15 +521,15 @@ public class MultiGetRequest extends ActionRequest
 
                         fetchSourceContext = new FetchSourceContext(
                             fetchSourceContext.fetchSource(),
-                            includes == null ? Strings.EMPTY_ARRAY : includes.toArray(new String[0]),
-                            excludes == null ? Strings.EMPTY_ARRAY : excludes.toArray(new String[0])
+                            includes == null ? Strings.EMPTY_ARRAY : includes.toArray(new String[includes.size()]),
+                            excludes == null ? Strings.EMPTY_ARRAY : excludes.toArray(new String[excludes.size()])
                         );
                     }
                 }
             }
             String[] aFields;
             if (storedFields != null) {
-                aFields = storedFields.toArray(new String[0]);
+                aFields = storedFields.toArray(new String[storedFields.size()]);
             } else {
                 aFields = defaultFields;
             }

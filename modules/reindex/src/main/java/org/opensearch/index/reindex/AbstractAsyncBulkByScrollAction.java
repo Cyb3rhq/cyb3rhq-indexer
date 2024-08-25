@@ -32,7 +32,7 @@
 
 package org.opensearch.index.reindex;
 
-import org.apache.hc.core5.http.HttpRequestInterceptor;
+import org.apache.http.HttpRequestInterceptor;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.opensearch.action.DocWriteRequest;
@@ -516,7 +516,7 @@ public abstract class AbstractAsyncBulkByScrollAction<
             return;
         }
         RefreshRequest refresh = new RefreshRequest();
-        refresh.indices(destinationIndices.toArray(new String[0]));
+        refresh.indices(destinationIndices.toArray(new String[destinationIndices.size()]));
         logger.debug("[{}]: refreshing", task.getId());
         client.admin().indices().refresh(refresh, new ActionListener<RefreshResponse>() {
             @Override

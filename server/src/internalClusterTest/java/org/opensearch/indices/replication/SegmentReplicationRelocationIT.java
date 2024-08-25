@@ -76,7 +76,7 @@ public class SegmentReplicationRelocationIT extends SegmentReplicationBaseIT {
         }
 
         logger.info("--> start another node");
-        final String newPrimary = internalCluster().startNode();
+        final String newPrimary = internalCluster().startNode(featureFlagSettings());
         ClusterHealthResponse clusterHealthResponse = client().admin()
             .cluster()
             .prepareHealth()
@@ -153,7 +153,7 @@ public class SegmentReplicationRelocationIT extends SegmentReplicationBaseIT {
         }
 
         logger.info("--> start another node");
-        final String newPrimary = internalCluster().startNode();
+        final String newPrimary = internalCluster().startNode(featureFlagSettings());
         ClusterHealthResponse clusterHealthResponse = client().admin()
             .cluster()
             .prepareHealth()

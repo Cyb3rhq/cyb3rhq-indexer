@@ -357,15 +357,22 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
       }
     }
 
+    versionFile = {
+      copySpec {
+        from(rootProject.file('VERSION'))
+        fileMode 0644
+      }
+    }
+
     modulesFiles = { platform ->
       copySpec {
         eachFile {
-          if (it.relativePath.segments[-2] == 'bin' || ((platform == 'darwin-x64' || platform == 'darwin-arm64') && it.relativePath.segments[-2] == 'MacOS')) {
+          if (it.relativePath.segments[-2] == 'bin' || (platform == 'darwin-x64' && it.relativePath.segments[-2] == 'MacOS')) {
             // bin files, wherever they are within modules (eg platform specific) should be executable
             // and MacOS is an alternative to bin on macOS
-            it.permissions(perm -> perm.unix(0755))
+            it.mode = 0755
           } else {
-            it.permissions(perm -> perm.unix(0644))
+            it.mode = 0644
           }
         }
         def buildModules = buildModulesTaskProvider
@@ -413,7 +420,7 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
           from '../src/bin'
           exclude '*.exe'
           exclude '*.bat'
-          eachFile { it.permissions(perm -> perm.unix(0755)) }
+          eachFile { it.setMode(0755) }
           MavenFilteringHack.filter(it, expansionsForDistribution(distributionType, java))
         }
         // windows files, only for zip
@@ -431,7 +438,7 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
         }
         // module provided bin files
         with copySpec {
-          eachFile { it.permissions(perm -> perm.unix(0755)) }
+          eachFile { it.setMode(0755) }
           from project(':distribution').buildBin
           if (distributionType != 'zip') {
             exclude '*.bat'
@@ -473,7 +480,7 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
         }
         eachFile { FileCopyDetails details ->
           if (details.relativePath.segments[-2] == 'bin' || details.relativePath.segments[-1] == 'jspawnhelper') {
-            details.permissions(perm -> perm.unix(0755))
+            details.mode = 0755
           }
           if (details.name == 'src.zip') {
             details.exclude()
@@ -501,7 +508,7 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
         }
         eachFile { FileCopyDetails details ->
           if (details.relativePath.segments[-2] == 'bin' || details.relativePath.segments[-1] == 'jspawnhelper') {
-            details.permissions(perm -> perm.unix(0755))
+            details.mode = 0755
           }
         }
       }
@@ -523,18 +530,18 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
  *  <dt>path.conf</dt>
  *  <dd>The default directory from which to load configuration. This is used in
  *    the packaging scripts, but in that context it is always
- *    /etc/opensearch. Its also used in bin/opensearch-plugin, where it is
- *    /etc/opensearch for the os packages but $OPENSEARCH_HOME/config otherwise.</dd>
+ *    /etc/cyb3rhq-indexer. Its also used in bin/opensearch-plugin, where it is
+ *    /etc/cyb3rhq-indexer for the os packages but $OPENSEARCH_HOME/config otherwise.</dd>
  *  <dt>path.env</dt>
  *  <dd>The env file sourced before bin/opensearch to set environment
- *    variables. Think /etc/defaults/opensearch.</dd>
+ *    variables. Think /etc/defaults/cyb3rhq-indexer.</dd>
  *  <dt>heap.min and heap.max</dt>
  *  <dd>Default min and max heap</dd>
  *  <dt>scripts.footer</dt>
  *  <dd>Footer appended to control scripts embedded in the distribution that is
  *    (almost) entirely there for cosmetic reasons.</dd>
  *  <dt>stopping.timeout</dt>
- *  <dd>RPM's init script needs to wait for opensearch to stop before
+ *  <dd>RPM's init script needs to wait for cyb3rhq-indexer to stop before
  *    returning from stop and it needs a maximum time to wait. This is it. One
  *    day. DEB retries forever.</dd>
  * </dl>
@@ -542,8 +549,8 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
 subprojects {
   ext.expansionsForDistribution = { distributionType, jdk ->
     final String defaultHeapSize = "1g"
-    final String packagingPathData = "path.data: /var/lib/opensearch"
-    final String pathLogs = "/var/log/opensearch"
+    final String packagingPathData = "path.data: /var/lib/cyb3rhq-indexer"
+    final String pathLogs = "/var/log/cyb3rhq-indexer"
     final String packagingPathLogs = "path.logs: ${pathLogs}"
     final String packagingLoggc = "${pathLogs}/gc.log"
 
@@ -558,8 +565,8 @@ subprojects {
       'project.version': version,
 
       'path.conf': [
-        'deb': '/etc/opensearch',
-        'rpm': '/etc/opensearch',
+        'deb': '/etc/cyb3rhq-indexer',
+        'rpm': '/etc/cyb3rhq-indexer',
         'def': '"$OPENSEARCH_HOME"/config'
       ],
       'path.data': [
@@ -568,15 +575,15 @@ subprojects {
         'def': '#path.data: /path/to/data'
       ],
       'path.env': [
-        'deb': '/etc/default/opensearch',
-        'rpm': '/etc/sysconfig/opensearch',
+        'deb': '/etc/default/cyb3rhq-indexer',
+        'rpm': '/etc/sysconfig/cyb3rhq-indexer',
         /* There isn't one of these files for tar or zip but its important to
           make an empty string here so the script can properly skip it. */
         'def': 'if [ -z "$OPENSEARCH_PATH_CONF" ]; then OPENSEARCH_PATH_CONF="$OPENSEARCH_HOME"/config; done',
       ],
       'source.path.env': [
-        'deb': 'source /etc/default/opensearch',
-        'rpm': 'source /etc/sysconfig/opensearch',
+        'deb': 'source /etc/default/cyb3rhq-indexer',
+        'rpm': 'source /etc/sysconfig/cyb3rhq-indexer',
         'def': 'if [ -z "$OPENSEARCH_PATH_CONF" ]; then OPENSEARCH_PATH_CONF="$OPENSEARCH_HOME"/config; fi',
       ],
       'path.logs': [
@@ -594,14 +601,14 @@ subprojects {
       'heap.max': defaultHeapSize,
 
       'heap.dump.path': [
-        'deb': "-XX:HeapDumpPath=/var/lib/opensearch",
-        'rpm': "-XX:HeapDumpPath=/var/lib/opensearch",
+        'deb': "-XX:HeapDumpPath=/var/lib/cyb3rhq-indexer",
+        'rpm': "-XX:HeapDumpPath=/var/lib/cyb3rhq-indexer",
         'def': "-XX:HeapDumpPath=data"
       ],
 
       'error.file': [
-        'deb': "-XX:ErrorFile=/var/log/opensearch/hs_err_pid%p.log",
-        'rpm': "-XX:ErrorFile=/var/log/opensearch/hs_err_pid%p.log",
+        'deb': "-XX:ErrorFile=/usr/share/cyb3rhq-indexer/hs_err_pid%p.log",
+        'rpm': "-XX:ErrorFile=/usr/share/cyb3rhq-indexer/hs_err_pid%p.log",
         'def': "-XX:ErrorFile=logs/hs_err_pid%p.log"
       ],
 
@@ -663,7 +670,6 @@ subprojects {
 }
 
 ['archives:darwin-tar',
- 'archives:darwin-arm64-tar',
  'archives:integ-test-zip',
  'archives:linux-arm64-tar',
  'archives:linux-tar',

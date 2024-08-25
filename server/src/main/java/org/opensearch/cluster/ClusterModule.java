@@ -48,9 +48,7 @@ import org.opensearch.cluster.metadata.MetadataIndexStateService;
 import org.opensearch.cluster.metadata.MetadataIndexTemplateService;
 import org.opensearch.cluster.metadata.MetadataMappingService;
 import org.opensearch.cluster.metadata.MetadataUpdateSettingsService;
-import org.opensearch.cluster.metadata.QueryGroupMetadata;
 import org.opensearch.cluster.metadata.RepositoriesMetadata;
-import org.opensearch.cluster.metadata.ViewMetadata;
 import org.opensearch.cluster.metadata.WeightedRoutingMetadata;
 import org.opensearch.cluster.routing.DelayedAllocationService;
 import org.opensearch.cluster.routing.allocation.AllocationService;
@@ -85,6 +83,7 @@ import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Setting.Property;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.common.util.set.Sets;
 import org.opensearch.core.ParseField;
@@ -93,7 +92,6 @@ import org.opensearch.core.common.io.stream.NamedWriteableRegistry.Entry;
 import org.opensearch.core.common.io.stream.Writeable.Reader;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.gateway.GatewayAllocator;
-import org.opensearch.gateway.ShardsBatchGatewayAllocator;
 import org.opensearch.ingest.IngestMetadata;
 import org.opensearch.persistent.PersistentTasksCustomMetadata;
 import org.opensearch.persistent.PersistentTasksNodeService;
@@ -146,8 +144,7 @@ public class ClusterModule extends AbstractModule {
         List<ClusterPlugin> clusterPlugins,
         ClusterInfoService clusterInfoService,
         SnapshotsInfoService snapshotsInfoService,
-        ThreadContext threadContext,
-        ClusterManagerMetrics clusterManagerMetrics
+        ThreadContext threadContext
     ) {
         this.clusterPlugins = clusterPlugins;
         this.deciderList = createAllocationDeciders(settings, clusterService.getClusterSettings(), clusterPlugins);
@@ -155,14 +152,7 @@ public class ClusterModule extends AbstractModule {
         this.shardsAllocator = createShardsAllocator(settings, clusterService.getClusterSettings(), clusterPlugins);
         this.clusterService = clusterService;
         this.indexNameExpressionResolver = new IndexNameExpressionResolver(threadContext);
-        this.allocationService = new AllocationService(
-            allocationDeciders,
-            shardsAllocator,
-            clusterInfoService,
-            snapshotsInfoService,
-            settings,
-            clusterManagerMetrics
-        );
+        this.allocationService = new AllocationService(allocationDeciders, shardsAllocator, clusterInfoService, snapshotsInfoService);
     }
 
     public static List<Entry> getNamedWriteables() {
@@ -207,7 +197,6 @@ public class ClusterModule extends AbstractModule {
             ComposableIndexTemplateMetadata::readDiffFrom
         );
         registerMetadataCustom(entries, DataStreamMetadata.TYPE, DataStreamMetadata::new, DataStreamMetadata::readDiffFrom);
-        registerMetadataCustom(entries, ViewMetadata.TYPE, ViewMetadata::new, ViewMetadata::readDiffFrom);
         registerMetadataCustom(entries, WeightedRoutingMetadata.TYPE, WeightedRoutingMetadata::new, WeightedRoutingMetadata::readDiffFrom);
         registerMetadataCustom(
             entries,
@@ -215,8 +204,6 @@ public class ClusterModule extends AbstractModule {
             DecommissionAttributeMetadata::new,
             DecommissionAttributeMetadata::readDiffFrom
         );
-
-        registerMetadataCustom(entries, QueryGroupMetadata.TYPE, QueryGroupMetadata::new, QueryGroupMetadata::readDiffFrom);
         // Task Status (not Diffable)
         entries.add(new Entry(Task.Status.class, PersistentTasksNodeService.Status.NAME, PersistentTasksNodeService.Status::new));
         return entries;
@@ -307,7 +294,6 @@ public class ClusterModule extends AbstractModule {
                 DataStreamMetadata::fromXContent
             )
         );
-        entries.add(new NamedXContentRegistry.Entry(Metadata.Custom.class, new ParseField(ViewMetadata.TYPE), ViewMetadata::fromXContent));
         entries.add(
             new NamedXContentRegistry.Entry(
                 Metadata.Custom.class,
@@ -386,7 +372,9 @@ public class ClusterModule extends AbstractModule {
         addAllocationDecider(deciders, new AwarenessAllocationDecider(settings, clusterSettings));
         addAllocationDecider(deciders, new NodeLoadAwareAllocationDecider(settings, clusterSettings));
         addAllocationDecider(deciders, new TargetPoolAllocationDecider());
-        addAllocationDecider(deciders, new RemoteStoreMigrationAllocationDecider(settings, clusterSettings));
+        if (FeatureFlags.isEnabled(FeatureFlags.REMOTE_STORE_MIGRATION_EXPERIMENTAL_SETTING)) {
+            addAllocationDecider(deciders, new RemoteStoreMigrationAllocationDecider(settings, clusterSettings));
+        }
 
         clusterPlugins.stream()
             .flatMap(p -> p.createAllocationDeciders(settings, clusterSettings).stream())
@@ -432,7 +420,6 @@ public class ClusterModule extends AbstractModule {
     @Override
     protected void configure() {
         bind(GatewayAllocator.class).asEagerSingleton();
-        bind(ShardsBatchGatewayAllocator.class).asEagerSingleton();
         bind(AllocationService.class).toInstance(allocationService);
         bind(ClusterService.class).toInstance(clusterService);
         bind(NodeConnectionsService.class).asEagerSingleton();
@@ -452,10 +439,10 @@ public class ClusterModule extends AbstractModule {
         bind(ShardsAllocator.class).toInstance(shardsAllocator);
     }
 
-    public void setExistingShardsAllocators(GatewayAllocator gatewayAllocator, ShardsBatchGatewayAllocator shardsBatchGatewayAllocator) {
+    public void setExistingShardsAllocators(GatewayAllocator gatewayAllocator) {
         final Map<String, ExistingShardsAllocator> existingShardsAllocators = new HashMap<>();
         existingShardsAllocators.put(GatewayAllocator.ALLOCATOR_NAME, gatewayAllocator);
-        existingShardsAllocators.put(ShardsBatchGatewayAllocator.ALLOCATOR_NAME, shardsBatchGatewayAllocator);
+
         for (ClusterPlugin clusterPlugin : clusterPlugins) {
             for (Map.Entry<String, ExistingShardsAllocator> existingShardsAllocatorEntry : clusterPlugin.getExistingShardsAllocators()
                 .entrySet()) {

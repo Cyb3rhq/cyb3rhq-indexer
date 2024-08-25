@@ -5,7 +5,7 @@
 
 package org.opensearch.index.reindex.spi;
 
-import org.apache.hc.core5.http.HttpRequestInterceptor;
+import org.apache.http.HttpRequestInterceptor;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.index.reindex.ReindexRequest;
 

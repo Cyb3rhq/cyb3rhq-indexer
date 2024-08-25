@@ -166,8 +166,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
             "uniqueid1",
             new TransportAddress(InetAddress.getByName("127.0.0.0"), 9300),
             new HashMap<String, String>(),
-            Version.fromString("3.0.0"),
-            Version.fromString("3.0.0"),
+            Version.CURRENT,
+            Version.CURRENT,
             Collections.emptyList()
         );
         client = new NoOpNodeClient(this.getTestName());
@@ -196,8 +196,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
             "127.0.0.1",
             "9300",
             "0.0.7",
-            "3.0.0",
-            "3.0.0",
+            Version.CURRENT.toString(),
+            "2.0.0",
             Collections.emptyList(),
             extensionScopedSettings
         );
@@ -207,7 +207,7 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
             "127.0.0.1",
             "9301",
             "0.0.7",
-            "2.0.0",
+            Version.CURRENT.toString(),
             "2.0.0",
             List.of(dependentExtension),
             extensionScopedSettings
@@ -227,8 +227,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
                 "uniqueid1",
                 new TransportAddress(InetAddress.getByName("127.0.0.1"), 9300),
                 new HashMap<String, String>(),
-                Version.fromString("3.0.0"),
-                Version.fromString("3.0.0"),
+                Version.CURRENT,
+                Version.fromString("2.0.0"),
                 Collections.emptyList()
             )
         );
@@ -239,7 +239,7 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
                 "uniqueid2",
                 new TransportAddress(InetAddress.getByName("127.0.0.1"), 9301),
                 new HashMap<String, String>(),
-                Version.fromString("2.0.0"),
+                Version.CURRENT,
                 Version.fromString("2.0.0"),
                 List.of(expectedDependency)
             )
@@ -267,8 +267,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
             "127.0.0.0",
             "9300",
             "0.0.7",
-            "3.0.0",
-            "3.0.0",
+            Version.CURRENT.toString(),
+            "2.0.0",
             Collections.emptyList(),
             null
         );
@@ -278,8 +278,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
             "127.0.0.0",
             "9300",
             "0.0.7",
-            "3.0.0",
-            "3.0.0",
+            Version.CURRENT.toString(),
+            "2.0.0",
             null,
             null
         );
@@ -287,7 +287,9 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
         extensionsManager.loadExtension(firstExtension);
         IOException exception = expectThrows(IOException.class, () -> extensionsManager.loadExtension(secondExtension));
         assertEquals(
-            "Duplicate uniqueId [uniqueid1]. Did not load extension: Extension [name=secondExtension, uniqueId=uniqueid1, hostAddress=127.0.0.0, port=9300, version=0.0.7, opensearchVersion=3.0.0, minimumCompatibleVersion=3.0.0]",
+            "Duplicate uniqueId [uniqueid1]. Did not load extension: Extension [name=secondExtension, uniqueId=uniqueid1, hostAddress=127.0.0.0, port=9300, version=0.0.7, opensearchVersion="
+                + Version.CURRENT
+                + ", minimumCompatibleVersion=2.0.0]",
             exception.getMessage()
         );
 
@@ -299,8 +301,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
                 "uniqueid1",
                 new TransportAddress(InetAddress.getByName("127.0.0.0"), 9300),
                 new HashMap<String, String>(),
-                Version.fromString("3.0.0"),
-                Version.fromString("3.0.0"),
+                Version.CURRENT,
+                Version.fromString("2.0.0."),
                 Collections.emptyList()
             )
         );
@@ -340,8 +342,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
             "uniqueid1",
             new TransportAddress(InetAddress.getByName("127.0.0.0"), 9300),
             new HashMap<String, String>(),
-            Version.fromString("3.0.0"),
-            Version.fromString("3.0.0"),
+            Version.CURRENT,
+            Version.CURRENT,
             List.of(expectedDependency)
         );
 
@@ -360,7 +362,7 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
 
     public void testExtensionDependency() throws Exception {
         String expectedUniqueId = "Test uniqueId";
-        Version expectedVersion = Version.fromString("3.0.0");
+        Version expectedVersion = Version.CURRENT;
 
         ExtensionDependency dependency = new ExtensionDependency(expectedUniqueId, expectedVersion);
 
@@ -497,7 +499,7 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
         String uniqueIdStr = "uniqueid1";
 
         extensionsManager.loadExtension(
-            new Extension("firstExtension", uniqueIdStr, "127.0.0.0", "9300", "0.0.7", "3.0.0", "3.0.0", List.of(), null)
+            new Extension("firstExtension", uniqueIdStr, "127.0.0.0", "9300", "0.0.7", "2.8.0", "2.8.0", List.of(), null)
         );
 
         List<String> actionsList = List.of("GET /foo foo", "PUT /bar bar", "POST /baz baz");
@@ -541,8 +543,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
                 "127.0.0.0",
                 "9300",
                 "0.0.7",
-                "3.0.0",
-                "3.0.0",
+                "2.8.0",
+                "2.8.0",
                 List.of(),
                 extensionScopedSettings
             );
@@ -583,7 +585,7 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
 
         String uniqueIdStr = "uniqueid1";
         extensionsManager.loadExtension(
-            new Extension("firstExtension", uniqueIdStr, "127.0.0.0", "9300", "0.0.7", "3.0.0", "3.0.0", List.of(), null)
+            new Extension("firstExtension", uniqueIdStr, "127.0.0.0", "9300", "0.0.7", "2.8.0", "2.8.0", List.of(), null)
         );
         List<String> actionsList = List.of("FOO /foo", "PUT /bar", "POST /baz");
         List<String> deprecatedActionsList = List.of("GET /deprecated/foo", "It's deprecated!");
@@ -601,7 +603,7 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
 
         String uniqueIdStr = "uniqueid1";
         extensionsManager.loadExtension(
-            new Extension("firstExtension", uniqueIdStr, "127.0.0.0", "9300", "0.0.7", "3.0.0", "3.0.0", List.of(), null)
+            new Extension("firstExtension", uniqueIdStr, "127.0.0.0", "9300", "0.0.7", "2.8.0", "2.8.0", List.of(), null)
         );
         List<String> actionsList = List.of("GET /foo", "PUT /bar", "POST /baz");
         List<String> deprecatedActionsList = List.of("FOO /deprecated/foo", "It's deprecated!");
@@ -618,7 +620,7 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
         initialize(extensionsManager);
         String uniqueIdStr = "uniqueid1";
         extensionsManager.loadExtension(
-            new Extension("firstExtension", uniqueIdStr, "127.0.0.0", "9300", "0.0.7", "3.0.0", "3.0.0", List.of(), null)
+            new Extension("firstExtension", uniqueIdStr, "127.0.0.0", "9300", "0.0.7", "2.8.0", "2.8.0", List.of(), null)
         );
         List<String> actionsList = List.of("GET", "PUT /bar", "POST /baz");
         List<String> deprecatedActionsList = List.of("GET /deprecated/foo", "It's deprecated!");
@@ -635,7 +637,7 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
         initialize(extensionsManager);
         String uniqueIdStr = "uniqueid1";
         extensionsManager.loadExtension(
-            new Extension("firstExtension", uniqueIdStr, "127.0.0.0", "9300", "0.0.7", "3.0.0", "3.0.0", List.of(), null)
+            new Extension("firstExtension", uniqueIdStr, "127.0.0.0", "9300", "0.0.7", "2.8.0", "2.8.0", List.of(), null)
         );
         List<String> actionsList = List.of("GET /foo", "PUT /bar", "POST /baz");
         List<String> deprecatedActionsList = List.of("GET", "It's deprecated!");
@@ -719,8 +721,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
                 "uniqueid1",
                 new TransportAddress(InetAddress.getByName("127.0.0.0"), 9300),
                 new HashMap<String, String>(),
-                Version.fromString("3.0.0"),
-                Version.fromString("3.0.0"),
+                Version.CURRENT,
+                Version.CURRENT,
                 List.of(expectedDependency)
             )
         );
@@ -930,7 +932,7 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
             "127.0.0.0",
             "9300",
             "0.0.7",
-            "3.0.0",
+            "2.8.0",
             "3.99.0",
             List.of(),
             null
@@ -958,8 +960,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
             "127.0.0.0",
             "9300",
             "0.0.7",
-            "3.0.0",
-            "3.0.0",
+            Version.CURRENT.toString(),
+            "2.0.0",
             List.of(),
             extensionScopedSettings
         );
@@ -972,8 +974,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
             "uniqueid1",
             new TransportAddress(InetAddress.getByName("127.0.0.1"), 9300),
             new HashMap<String, String>(),
-            Version.fromString("3.0.0"),
-            Version.fromString("3.0.0"),
+            Version.CURRENT,
+            Version.fromString("2.0.0"),
             List.of()
         );
         DiscoveryExtensionNode initializedExtension = extensionsManager.getExtensionIdMap().get(extension.getId());

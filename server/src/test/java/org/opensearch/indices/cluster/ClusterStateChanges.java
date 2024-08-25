@@ -105,7 +105,6 @@ import org.opensearch.env.TestEnvironment;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.shard.IndexEventListener;
-import org.opensearch.indices.DefaultRemoteStoreSettings;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.ShardLimitValidator;
 import org.opensearch.indices.SystemIndices;
@@ -313,9 +312,7 @@ public class ClusterStateChanges {
             xContentRegistry,
             systemIndices,
             true,
-            awarenessReplicaBalance,
-            DefaultRemoteStoreSettings.INSTANCE,
-            null
+            awarenessReplicaBalance
         );
 
         transportCloseIndexAction = new TransportCloseIndexAction(
@@ -384,7 +381,14 @@ public class ClusterStateChanges {
         remoteStoreNodeService = new RemoteStoreNodeService(new SetOnce<>(repositoriesService)::get, threadPool);
 
         nodeRemovalExecutor = new NodeRemovalClusterStateTaskExecutor(allocationService, logger);
-        joinTaskExecutor = new JoinTaskExecutor(Settings.EMPTY, allocationService, logger, (s, p, r) -> {}, remoteStoreNodeService);
+        joinTaskExecutor = new JoinTaskExecutor(
+            Settings.EMPTY,
+            allocationService,
+            logger,
+            (s, p, r) -> {},
+            transportService,
+            remoteStoreNodeService
+        );
     }
 
     public ClusterState createIndex(ClusterState state, CreateIndexRequest request) {

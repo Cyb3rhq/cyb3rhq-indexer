@@ -82,10 +82,10 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
     protected final String type;
     protected final Map<ShardId, ShardAttributes> shardAttributesMap;
     private final Lister<BaseNodesResponse<T>, T> action;
-    protected final AsyncShardFetchCache<T> cache;
+    private final AsyncShardFetchCache<T> cache;
     private final AtomicLong round = new AtomicLong();
     private boolean closed;
-    final String reroutingKey;
+    private final String reroutingKey;
     private final Map<ShardId, Set<String>> shardToIgnoreNodes = new HashMap<>();
 
     @SuppressWarnings("unchecked")
@@ -99,7 +99,7 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
         this.logger = logger;
         this.type = type;
         shardAttributesMap = new HashMap<>();
-        shardAttributesMap.put(shardId, new ShardAttributes(customDataPath));
+        shardAttributesMap.put(shardId, new ShardAttributes(shardId, customDataPath));
         this.action = (Lister<BaseNodesResponse<T>, T>) action;
         this.reroutingKey = "ShardId=[" + shardId.toString() + "]";
         cache = new ShardCache<>(logger, reroutingKey, type);
@@ -120,15 +120,14 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
         String type,
         Map<ShardId, ShardAttributes> shardAttributesMap,
         Lister<? extends BaseNodesResponse<T>, T> action,
-        String batchId,
-        AsyncShardFetchCache<T> cache
+        String batchId
     ) {
         this.logger = logger;
         this.type = type;
         this.shardAttributesMap = shardAttributesMap;
         this.action = (Lister<BaseNodesResponse<T>, T>) action;
         this.reroutingKey = "BatchID=[" + batchId + "]";
-        this.cache = cache;
+        cache = new ShardCache<>(logger, reroutingKey, type);
     }
 
     @Override

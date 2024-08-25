@@ -216,9 +216,6 @@ import org.opensearch.action.admin.indices.template.put.PutIndexTemplateAction;
 import org.opensearch.action.admin.indices.template.put.TransportPutComponentTemplateAction;
 import org.opensearch.action.admin.indices.template.put.TransportPutComposableIndexTemplateAction;
 import org.opensearch.action.admin.indices.template.put.TransportPutIndexTemplateAction;
-import org.opensearch.action.admin.indices.tiering.HotToWarmTieringAction;
-import org.opensearch.action.admin.indices.tiering.RestWarmTieringAction;
-import org.opensearch.action.admin.indices.tiering.TransportHotToWarmTieringAction;
 import org.opensearch.action.admin.indices.upgrade.get.TransportUpgradeStatusAction;
 import org.opensearch.action.admin.indices.upgrade.get.UpgradeStatusAction;
 import org.opensearch.action.admin.indices.upgrade.post.TransportUpgradeAction;
@@ -227,12 +224,6 @@ import org.opensearch.action.admin.indices.upgrade.post.UpgradeAction;
 import org.opensearch.action.admin.indices.upgrade.post.UpgradeSettingsAction;
 import org.opensearch.action.admin.indices.validate.query.TransportValidateQueryAction;
 import org.opensearch.action.admin.indices.validate.query.ValidateQueryAction;
-import org.opensearch.action.admin.indices.view.CreateViewAction;
-import org.opensearch.action.admin.indices.view.DeleteViewAction;
-import org.opensearch.action.admin.indices.view.GetViewAction;
-import org.opensearch.action.admin.indices.view.ListViewNamesAction;
-import org.opensearch.action.admin.indices.view.SearchViewAction;
-import org.opensearch.action.admin.indices.view.UpdateViewAction;
 import org.opensearch.action.bulk.BulkAction;
 import org.opensearch.action.bulk.TransportBulkAction;
 import org.opensearch.action.bulk.TransportShardBulkAction;
@@ -297,7 +288,6 @@ import org.opensearch.client.node.NodeClient;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.common.NamedRegistry;
-import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.inject.AbstractModule;
 import org.opensearch.common.inject.TypeLiteral;
 import org.opensearch.common.inject.multibindings.MapBinder;
@@ -421,7 +411,6 @@ import org.opensearch.rest.action.admin.indices.RestUpdateSettingsAction;
 import org.opensearch.rest.action.admin.indices.RestUpgradeAction;
 import org.opensearch.rest.action.admin.indices.RestUpgradeStatusAction;
 import org.opensearch.rest.action.admin.indices.RestValidateQueryAction;
-import org.opensearch.rest.action.admin.indices.RestViewAction;
 import org.opensearch.rest.action.cat.AbstractCatAction;
 import org.opensearch.rest.action.cat.RestAliasAction;
 import org.opensearch.rest.action.cat.RestAllocationAction;
@@ -444,7 +433,6 @@ import org.opensearch.rest.action.cat.RestTasksAction;
 import org.opensearch.rest.action.cat.RestTemplatesAction;
 import org.opensearch.rest.action.cat.RestThreadPoolAction;
 import org.opensearch.rest.action.document.RestBulkAction;
-import org.opensearch.rest.action.document.RestBulkStreamingAction;
 import org.opensearch.rest.action.document.RestDeleteAction;
 import org.opensearch.rest.action.document.RestGetAction;
 import org.opensearch.rest.action.document.RestGetSourceAction;
@@ -637,9 +625,6 @@ public class ActionModule extends AbstractModule {
         actions.register(CreateSnapshotAction.INSTANCE, TransportCreateSnapshotAction.class);
         actions.register(CloneSnapshotAction.INSTANCE, TransportCloneSnapshotAction.class);
         actions.register(RestoreSnapshotAction.INSTANCE, TransportRestoreSnapshotAction.class);
-        if (FeatureFlags.isEnabled(FeatureFlags.TIERED_REMOTE_INDEX)) {
-            actions.register(HotToWarmTieringAction.INSTANCE, TransportHotToWarmTieringAction.class);
-        }
         actions.register(SnapshotsStatusAction.INSTANCE, TransportSnapshotsStatusAction.class);
 
         actions.register(ClusterAddWeightedRoutingAction.INSTANCE, TransportAddWeightedRoutingAction.class);
@@ -739,14 +724,6 @@ public class ActionModule extends AbstractModule {
         actions.register(ResolveIndexAction.INSTANCE, ResolveIndexAction.TransportAction.class);
         actions.register(DataStreamsStatsAction.INSTANCE, DataStreamsStatsAction.TransportAction.class);
 
-        // Views:
-        actions.register(CreateViewAction.INSTANCE, CreateViewAction.TransportAction.class);
-        actions.register(DeleteViewAction.INSTANCE, DeleteViewAction.TransportAction.class);
-        actions.register(GetViewAction.INSTANCE, GetViewAction.TransportAction.class);
-        actions.register(UpdateViewAction.INSTANCE, UpdateViewAction.TransportAction.class);
-        actions.register(ListViewNamesAction.INSTANCE, ListViewNamesAction.TransportAction.class);
-        actions.register(SearchViewAction.INSTANCE, SearchViewAction.TransportAction.class);
-
         // Persistent tasks:
         actions.register(StartPersistentTaskAction.INSTANCE, StartPersistentTaskAction.TransportAction.class);
         actions.register(UpdatePersistentTaskStatusAction.INSTANCE, UpdatePersistentTaskStatusAction.TransportAction.class);
@@ -764,14 +741,14 @@ public class ActionModule extends AbstractModule {
         actions.register(DeleteDanglingIndexAction.INSTANCE, TransportDeleteDanglingIndexAction.class);
         actions.register(FindDanglingIndexAction.INSTANCE, TransportFindDanglingIndexAction.class);
 
+        // Remote Store
+        actions.register(RestoreRemoteStoreAction.INSTANCE, TransportRestoreRemoteStoreAction.class);
+
         // point in time actions
         actions.register(CreatePitAction.INSTANCE, TransportCreatePitAction.class);
         actions.register(DeletePitAction.INSTANCE, TransportDeletePitAction.class);
         actions.register(PitSegmentsAction.INSTANCE, TransportPitSegmentsAction.class);
         actions.register(GetAllPitsAction.INSTANCE, TransportGetAllPitsAction.class);
-
-        // Remote Store
-        actions.register(RestoreRemoteStoreAction.INSTANCE, TransportRestoreRemoteStoreAction.class);
 
         if (FeatureFlags.isEnabled(FeatureFlags.EXTENSIONS)) {
             // ExtensionProxyAction
@@ -894,7 +871,6 @@ public class ActionModule extends AbstractModule {
         registerHandler.accept(new RestTermVectorsAction());
         registerHandler.accept(new RestMultiTermVectorsAction());
         registerHandler.accept(new RestBulkAction(settings));
-        registerHandler.accept(new RestBulkStreamingAction(settings));
         registerHandler.accept(new RestUpdateAction());
 
         registerHandler.accept(new RestSearchAction());
@@ -942,14 +918,6 @@ public class ActionModule extends AbstractModule {
         registerHandler.accept(new RestResolveIndexAction());
         registerHandler.accept(new RestDataStreamsStatsAction());
 
-        // View API
-        registerHandler.accept(new RestViewAction.CreateViewHandler());
-        registerHandler.accept(new RestViewAction.DeleteViewHandler());
-        registerHandler.accept(new RestViewAction.GetViewHandler());
-        registerHandler.accept(new RestViewAction.UpdateViewHandler());
-        registerHandler.accept(new RestViewAction.SearchViewHandler());
-        registerHandler.accept(new RestViewAction.ListViewNamesHandler());
-
         // CAT API
         registerHandler.accept(new RestAllocationAction());
         registerHandler.accept(new RestCatSegmentReplicationAction());
@@ -972,9 +940,6 @@ public class ActionModule extends AbstractModule {
         registerHandler.accept(new RestNodeAttrsAction());
         registerHandler.accept(new RestRepositoriesAction());
         registerHandler.accept(new RestSnapshotAction());
-        if (FeatureFlags.isEnabled(FeatureFlags.TIERED_REMOTE_INDEX)) {
-            registerHandler.accept(new RestWarmTieringAction());
-        }
         registerHandler.accept(new RestTemplatesAction());
 
         // Point in time API
@@ -1064,9 +1029,8 @@ public class ActionModule extends AbstractModule {
      * <p>
      * This class is modeled after {@link NamedRegistry} but provides both register and unregister capabilities.
      *
-     * @opensearch.api
+     * @opensearch.internal
      */
-    @PublicApi(since = "2.7.0")
     public static class DynamicActionRegistry {
         // This is the unmodifiable actions map created during node bootstrap, which
         // will continue to link ActionType and TransportAction pairs from core and plugin
@@ -1200,12 +1164,9 @@ public class ActionModule extends AbstractModule {
          * @param route The {@link RestHandler.Route}.
          * @return the corresponding {@link RestSendToExtensionAction} if it is registered, null otherwise.
          */
+        @SuppressWarnings("unchecked")
         public RestSendToExtensionAction get(RestHandler.Route route) {
-            if (route instanceof NamedRoute) {
-                return routeRegistry.get((NamedRoute) route);
-            }
-            // Only NamedRoutes are map keys so any other route is not in the map
-            return null;
+            return routeRegistry.get(route);
         }
     }
 }

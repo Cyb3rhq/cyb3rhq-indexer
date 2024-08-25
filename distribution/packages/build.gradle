@@ -58,12 +58,12 @@ import java.util.regex.Pattern
  * The following commands are useful when it comes to check the user/group
  * and files permissions set within the RPM and DEB packages:
  *
- *    rpm -qlp --dump path/to/opensearch.rpm
- *    dpkg -c path/to/opensearch.deb
+ *    rpm -qlp --dump path/to/cyb3rhq-indexer.rpm
+ *    dpkg -c path/to/cyb3rhq-indexer.deb
  */
 
 plugins {
-  id "com.netflix.nebula.ospackage-base" version "11.9.1"
+  id "com.netflix.nebula.ospackage-base" version "11.8.1"
 }
 
 void addProcessFilesTask(String type, boolean jdk) {
@@ -79,20 +79,20 @@ void addProcessFilesTask(String type, boolean jdk) {
       MavenFilteringHack.filter(it, expansionsForDistribution(type, jdk))
     }
 
-    into('etc/opensearch') {
+    into('etc/cyb3rhq-indexer') {
       with configFiles(type, jdk)
     }
     MavenFilteringHack.filter(it, expansionsForDistribution(type, jdk))
 
     doLast {
       // create empty dirs, we set the permissions when configuring the packages
-      mkdir "${packagingFiles}/var/log/opensearch"
-      mkdir "${packagingFiles}/var/lib/opensearch"
-      mkdir "${packagingFiles}/usr/share/opensearch/plugins"
+      mkdir "${packagingFiles}/var/log/cyb3rhq-indexer"
+      mkdir "${packagingFiles}/var/lib/cyb3rhq-indexer"
+      mkdir "${packagingFiles}/usr/share/cyb3rhq-indexer/plugins"
 
-      // bare empty dir for /etc/opensearch and /etc/opensearch/jvm.options.d
-      mkdir "${packagingFiles}/opensearch"
-      mkdir "${packagingFiles}/opensearch/jvm.options.d"
+      // bare empty dir for /etc/cyb3rhq-indexer and /etc/cyb3rhq-indexer/jvm.options.d
+      mkdir "${packagingFiles}/cyb3rhq-indexer"
+      mkdir "${packagingFiles}/cyb3rhq-indexer/jvm.options.d"
     }
   }
 }
@@ -106,12 +106,13 @@ addProcessFilesTask('rpm', false)
 // since we have different templated files that need to be consumed, but the structure
 // is the same
 Closure commonPackageConfig(String type, boolean jdk, String architecture) {
+  project.version = rootProject.file('VERSION').getText()
   return {
     onlyIf {
       OS.current().equals(OS.WINDOWS) == false
     }
     dependsOn "process'${jdk ? '' : 'NoJdk'}${type.capitalize()}Files"
-    packageName "opensearch"
+    packageName "cyb3rhq-indexer"
     if (type == 'deb') {
       if (architecture == 'x64') {
         arch('amd64')
@@ -154,15 +155,13 @@ Closure commonPackageConfig(String type, boolean jdk, String architecture) {
 
     // top level "into" directive is not inherited from ospackage for some reason, so we must
     // specify it again explicitly for copying common files
-    into('/usr/share/opensearch') {
+    into('/usr/share/cyb3rhq-indexer') {
       into('bin') {
         with binFiles(type, jdk)
       }
       from(rootProject.projectDir) {
         include 'README.md'
-        filePermissions {
-          unix 0644
-        }
+        fileMode 0644
       }
       into('lib') {
         with libFiles()
@@ -175,6 +174,9 @@ Closure commonPackageConfig(String type, boolean jdk, String architecture) {
           with jdkFiles(project, 'linux', architecture)
         }
       }
+      into ('') {
+        with versionFile()
+      }
       // we need to specify every intermediate directory in these paths so the package managers know they are explicitly
       // intended to manage them; otherwise they may be left behind on uninstallation. duplicate calls of the same
       // directory are fine
@@ -185,9 +187,9 @@ Closure commonPackageConfig(String type, boolean jdk, String architecture) {
             directory('/' + segments[0..i].join('/'), 0755)
           }
           if (segments[-2] == 'bin' || segments[-1] == 'jspawnhelper') {
-            fcp.permissions(perm -> perm.unix(0755))
+            fcp.mode = 0755
           } else {
-            fcp.permissions(perm -> perm.unix(0644))
+            fcp.mode = 0644
           }
         }
       }
@@ -197,47 +199,37 @@ Closure commonPackageConfig(String type, boolean jdk, String architecture) {
     if (type == 'deb') {
       into("/usr/share/doc/${packageName}") {
         from "${packagingFiles}/copyright"
-        filePermissions {
-          unix 0644
-        }
+        fileMode 0644
       }
     } else {
       assert type == 'rpm'
-      into('/usr/share/opensearch') {
+      into('/usr/share/cyb3rhq-indexer') {
         from(rootProject.file('licenses')) {
           include 'APACHE-LICENSE-2.0.txt'
           rename { 'LICENSE.txt' }
         }
-        filePermissions {
-          unix 0644
-        }
+        fileMode 0644
       }
     }
 
     // ========= config files =========
-    configurationFile '/etc/opensearch/opensearch.yml'
-    configurationFile '/etc/opensearch/jvm.options'
-    configurationFile '/etc/opensearch/log4j2.properties'
+    configurationFile '/etc/cyb3rhq-indexer/opensearch.yml'
+    configurationFile '/etc/cyb3rhq-indexer/jvm.options'
+    configurationFile '/etc/cyb3rhq-indexer/log4j2.properties'
     from("${packagingFiles}") {
-      dirPermissions {
-        unix 0750
-      }
+      dirMode 0750
       into('/etc')
-      permissionGroup 'opensearch'
+      permissionGroup 'cyb3rhq-indexer'
       includeEmptyDirs true
       createDirectoryEntry true
-      include("opensearch") // empty dir, just to add directory entry
-      include("opensearch/jvm.options.d") // empty dir, just to add directory entry
+      include("cyb3rhq-indexer") // empty dir, just to add directory entry
+      include("cyb3rhq-indexer/jvm.options.d") // empty dir, just to add directory entry
     }
-    from("${packagingFiles}/etc/opensearch") {
-      into('/etc/opensearch')
-      dirPermissions {
-        unix 0750
-      }
-      filePermissions{
-        unix 0660
-      }
-      permissionGroup 'opensearch'
+    from("${packagingFiles}/etc/cyb3rhq-indexer") {
+      into('/etc/cyb3rhq-indexer')
+      dirMode 0750
+      fileMode 0660
+      permissionGroup 'cyb3rhq-indexer'
       includeEmptyDirs true
       createDirectoryEntry true
       fileType CONFIG | NOREPLACE
@@ -246,49 +238,37 @@ Closure commonPackageConfig(String type, boolean jdk, String architecture) {
     configurationFile envFile
     into(new File(envFile).getParent()) {
       fileType CONFIG | NOREPLACE
-      permissionGroup 'opensearch'
-      filePermissions {
-        unix 0660
-      }
-      from "${packagingFiles}/env/opensearch"
+      permissionGroup 'cyb3rhq-indexer'
+      fileMode 0660
+      from "${packagingFiles}/env/cyb3rhq-indexer"
     }
 
     // ========= systemd =========
     into('/usr/lib/tmpfiles.d') {
-      from "${packagingFiles}/systemd/opensearch.conf"
-      filePermissions {
-        unix 0644
-      }
+      from "${packagingFiles}/systemd/cyb3rhq-indexer.conf"
+      fileMode 0644
     }
     into('/usr/lib/systemd/system') {
       fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/systemd/opensearch.service"
-      filePermissions {
-        unix 0644
-      }
+      from "${packagingFiles}/systemd/cyb3rhq-indexer.service"
+      fileMode 0644
     }
     into('/usr/lib/sysctl.d') {
       fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/systemd/sysctl/opensearch.conf"
-      filePermissions {
-        unix 0644
-      }
+      from "${packagingFiles}/systemd/sysctl/cyb3rhq-indexer.conf"
+      fileMode 0644
     }
-    into('/usr/share/opensearch/bin') {
+    into('/usr/share/cyb3rhq-indexer/bin') {
       from "${packagingFiles}/systemd/systemd-entrypoint"
-      filePermissions {
-        unix 0755
-      }
+      fileMode 0755
     }
 
     // ========= sysV init =========
-    configurationFile '/etc/init.d/opensearch'
+    configurationFile '/etc/init.d/cyb3rhq-indexer'
     into('/etc/init.d') {
-      filePermissions {
-        unix 0750
-      }
+      fileMode 0750
       fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/init.d/opensearch"
+      from "${packagingFiles}/init.d/cyb3rhq-indexer"
     }
 
     // ========= empty dirs =========
@@ -302,16 +282,14 @@ Closure commonPackageConfig(String type, boolean jdk, String architecture) {
         createDirectoryEntry true
         user u
         permissionGroup g
-        dirPermissions {
-          unix mode
-        }
+        dirMode mode
       }
     }
-    copyEmptyDir('/var/log/opensearch', 'opensearch', 'opensearch', 0750)
-    copyEmptyDir('/var/lib/opensearch', 'opensearch', 'opensearch', 0750)
-    copyEmptyDir('/usr/share/opensearch/plugins', 'root', 'root', 0755)
+    copyEmptyDir('/var/log/cyb3rhq-indexer', 'cyb3rhq-indexer', 'cyb3rhq-indexer', 0750)
+    copyEmptyDir('/var/lib/cyb3rhq-indexer', 'cyb3rhq-indexer', 'cyb3rhq-indexer', 0750)
+    copyEmptyDir('/usr/share/cyb3rhq-indexer/plugins', 'root', 'root', 0755)
 
-    into '/usr/share/opensearch'
+    into '/usr/share/cyb3rhq-indexer'
     with noticeFile(jdk)
   }
 }
@@ -320,13 +298,13 @@ apply plugin: 'com.netflix.nebula.ospackage-base'
 
 // this is package indepdendent configuration
 ospackage {
-  maintainer 'OpenSearch Team <opensearch@amazon.com>'
+  maintainer 'Cyb3rhq, Inc <info@wazuh.com>'
   summary 'Distributed RESTful search engine built for the cloud'
   packageDescription '''
     Reference documentation can be found at
-    https://github.com/opensearch-project/OpenSearch
+    https://documentation.wazuh.com/current/getting-started/components/cyb3rhq-indexer.html
   '''.stripIndent().trim()
-  url 'https://github.com/opensearch-project/OpenSearch'
+  url 'https://documentation.wazuh.com/current/getting-started/components/cyb3rhq-indexer.html'
 
   // signing setup
   if (project.hasProperty('signing.password') && BuildParams.isSnapshotBuild() == false) {
@@ -345,7 +323,7 @@ ospackage {
   user 'root'
   permissionGroup 'root'
 
-  into '/usr/share/opensearch'
+  into '/usr/share/cyb3rhq-indexer'
 }
 
 Closure commonDebConfig(boolean jdk, String architecture) {
@@ -365,12 +343,6 @@ Closure commonDebConfig(boolean jdk, String architecture) {
     requires 'libc6'
     requires 'adduser'
 
-    into('/usr/share/lintian/overrides') {
-      from('src/deb/lintian/opensearch')
-      filePermissions {
-        unix 0644
-      }
-    }
   }
 }
 
@@ -387,7 +359,7 @@ tasks.register('buildDeb', Deb) {
 }
 
 tasks.register('buildNoJdkDeb', Deb) {
-  configure(commonDebConfig(false, 'x64'))
+  configure(commonDebConfig(true, 'x64'))
 }
 
 Closure commonRpmConfig(boolean jdk, String architecture) {
@@ -410,7 +382,7 @@ Closure commonRpmConfig(boolean jdk, String architecture) {
     vendor 'OpenSearch'
     // TODO ospackage doesn't support icon but we used to have one
 
-    // without this the rpm will have parent dirs of any files we copy in, eg /etc/opensearch
+    // without this the rpm will have parent dirs of any files we copy in, eg /etc/cyb3rhq-indexer
     addParentDirs false
   }
 }
@@ -505,7 +477,7 @@ subprojects {
           Path copyrightPath
           String expectedLicense
           String licenseFilename
-          copyrightPath = packageExtractionDir.toPath().resolve("usr/share/doc/opensearch/copyright")
+          copyrightPath = packageExtractionDir.toPath().resolve("usr/share/doc/cyb3rhq-indexer/copyright")
           expectedLicense = "ASL-2.0"
           licenseFilename = "APACHE-LICENSE-2.0.txt"
           final List<String> header = Arrays.asList("Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/",
@@ -524,7 +496,7 @@ subprojects {
         doLast {
           String licenseFilename = "APACHE-LICENSE-2.0.txt"
           final List<String> licenseLines = Files.readAllLines(rootDir.toPath().resolve("licenses/" + licenseFilename))
-          final Path licensePath = packageExtractionDir.toPath().resolve("usr/share/opensearch/LICENSE.txt")
+          final Path licensePath = packageExtractionDir.toPath().resolve("usr/share/cyb3rhq-indexer/LICENSE.txt")
           assertLinesInFile(licensePath, licenseLines)
         }
       }
@@ -537,7 +509,7 @@ subprojects {
       }
       doLast {
         final List<String> noticeLines = Arrays.asList("OpenSearch (https://opensearch.org/)", "Copyright OpenSearch Contributors")
-        final Path noticePath = packageExtractionDir.toPath().resolve("usr/share/opensearch/NOTICE.txt")
+        final Path noticePath = packageExtractionDir.toPath().resolve("usr/share/cyb3rhq-indexer/NOTICE.txt")
         assertLinesInFile(noticePath, noticeLines)
       }
     }

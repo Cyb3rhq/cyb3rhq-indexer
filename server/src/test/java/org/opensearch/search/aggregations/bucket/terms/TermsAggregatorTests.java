@@ -353,40 +353,33 @@ public class TermsAggregatorTests extends AggregatorTestCase {
                     newIndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE)
                 )
             ) {
-                List<Document> documents = new ArrayList<>();
                 Document document = new Document();
                 addFieldConsumer.apply(document, "string", "a");
                 addFieldConsumer.apply(document, "string", "b");
-                documents.add(document);
-
+                indexWriter.addDocument(document);
                 document = new Document();
                 addFieldConsumer.apply(document, "string", "");
                 addFieldConsumer.apply(document, "string", "c");
                 addFieldConsumer.apply(document, "string", "a");
-                documents.add(document);
-
+                indexWriter.addDocument(document);
                 document = new Document();
                 addFieldConsumer.apply(document, "string", "b");
                 addFieldConsumer.apply(document, "string", "d");
-                documents.add(document);
-
+                indexWriter.addDocument(document);
                 document = new Document();
                 addFieldConsumer.apply(document, "string", "");
                 if (includeDocCountField) {
                     // Adding _doc_count to one document
                     document.add(new NumericDocValuesField("_doc_count", 10));
                 }
-                documents.add(document);
+                indexWriter.addDocument(document);
 
                 if (includeDeletedDocumentsInSegment) {
                     document = new Document();
                     ADD_SORTED_SET_FIELD_INDEXED.apply(document, "string", "e");
-                    documents.add(document);
-                    indexWriter.addDocuments(documents);
+                    indexWriter.addDocument(document);
                     indexWriter.deleteDocuments(new Term("string", "e"));
                     assertEquals(5, indexWriter.getDocStats().maxDoc);  // deleted document still in segment
-                } else {
-                    indexWriter.addDocuments(documents);
                 }
 
                 try (IndexReader indexReader = maybeWrapReaderEs(indexWriter.getReader())) {

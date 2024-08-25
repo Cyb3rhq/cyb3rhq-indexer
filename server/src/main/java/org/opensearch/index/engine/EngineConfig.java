@@ -236,12 +236,6 @@ public final class EngineConfig {
         Property.Dynamic
     );
 
-    public static final Setting<Boolean> INDEX_USE_COMPOUND_FILE = Setting.boolSetting(
-        "index.use_compound_file",
-        true,
-        Property.IndexScope
-    );
-
     private final TranslogConfig translogConfig;
 
     private final TranslogFactory translogFactory;
@@ -250,7 +244,7 @@ public final class EngineConfig {
      * Creates a new {@link org.opensearch.index.engine.EngineConfig}
      */
     private EngineConfig(Builder builder) {
-        if (builder.isReadOnlyReplica && builder.indexSettings.isSegRepEnabledOrRemoteNode() == false) {
+        if (builder.isReadOnlyReplica && builder.indexSettings.isSegRepEnabled() == false) {
             throw new IllegalArgumentException("Shard can only be wired as a read only replica with Segment Replication enabled");
         }
         this.shardId = builder.shardId;
@@ -497,11 +491,7 @@ public final class EngineConfig {
      * @return true if this engine should be wired as read only.
      */
     public boolean isReadOnlyReplica() {
-        return indexSettings.isSegRepEnabledOrRemoteNode() && isReadOnlyReplica;
-    }
-
-    public boolean useCompoundFile() {
-        return indexSettings.getValue(INDEX_USE_COMPOUND_FILE);
+        return indexSettings.isSegRepEnabled() && isReadOnlyReplica;
     }
 
     /**

@@ -55,8 +55,6 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.http.HttpServerTransport;
 import org.opensearch.index.shard.PrimaryReplicaSyncer.ResyncTask;
 import org.opensearch.plugins.NetworkPlugin;
-import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
-import org.opensearch.plugins.SecureSettingsFactory;
 import org.opensearch.plugins.SecureTransportSettingsProvider;
 import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlActionType;
 import org.opensearch.tasks.RawTaskStatus;
@@ -76,9 +74,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 /**
  * A module to handle registering and binding all network related classes.
@@ -177,31 +173,13 @@ public final class NetworkModule {
         ClusterSettings clusterSettings,
         Tracer tracer,
         List<TransportInterceptor> transportInterceptors,
-        Collection<SecureSettingsFactory> secureSettingsFactories
+        Collection<SecureTransportSettingsProvider> secureTransportSettingsProvider
     ) {
         this.settings = settings;
 
-        final Collection<SecureTransportSettingsProvider> secureTransportSettingsProviders = secureSettingsFactories.stream()
-            .map(p -> p.getSecureTransportSettingsProvider(settings))
-            .filter(Optional::isPresent)
-            .map(Optional::get)
-            .collect(Collectors.toList());
-
-        if (secureTransportSettingsProviders.size() > 1) {
+        if (secureTransportSettingsProvider.size() > 1) {
             throw new IllegalArgumentException(
-                "there is more than one secure transport settings provider: " + secureTransportSettingsProviders
-            );
-        }
-
-        final Collection<SecureHttpTransportSettingsProvider> secureHttpTransportSettingsProviders = secureSettingsFactories.stream()
-            .map(p -> p.getSecureHttpTransportSettingsProvider(settings))
-            .filter(Optional::isPresent)
-            .map(Optional::get)
-            .collect(Collectors.toList());
-
-        if (secureHttpTransportSettingsProviders.size() > 1) {
-            throw new IllegalArgumentException(
-                "there is more than one secure HTTP transport settings provider: " + secureHttpTransportSettingsProviders
+                "there is more than one secure transport settings provider: " + secureTransportSettingsProvider
             );
         }
 
@@ -235,9 +213,9 @@ public final class NetworkModule {
                 registerTransport(entry.getKey(), entry.getValue());
             }
 
-            // Register any HTTP secure transports if available
-            if (secureHttpTransportSettingsProviders.isEmpty() == false) {
-                final SecureHttpTransportSettingsProvider secureSettingProvider = secureHttpTransportSettingsProviders.iterator().next();
+            // Register any secure transports if available
+            if (secureTransportSettingsProvider.isEmpty() == false) {
+                final SecureTransportSettingsProvider secureSettingProvider = secureTransportSettingsProvider.iterator().next();
 
                 final Map<String, Supplier<HttpServerTransport>> secureHttpTransportFactory = plugin.getSecureHttpTransports(
                     settings,
@@ -255,11 +233,6 @@ public final class NetworkModule {
                 for (Map.Entry<String, Supplier<HttpServerTransport>> entry : secureHttpTransportFactory.entrySet()) {
                     registerHttpTransport(entry.getKey(), entry.getValue());
                 }
-            }
-
-            // Register any secure transports if available
-            if (secureTransportSettingsProviders.isEmpty() == false) {
-                final SecureTransportSettingsProvider secureSettingProvider = secureTransportSettingsProviders.iterator().next();
 
                 final Map<String, Supplier<Transport>> secureTransportFactory = plugin.getSecureTransports(
                     settings,
@@ -403,7 +376,7 @@ public final class NetworkModule {
          * @param actualHandler The handler itself that implements the request handling
          * @param admissionControlActionType Admission control based on resource usage limits of provided action type
          * @return returns the actual TransportRequestHandler after intercepting all previous handlers
-         * @param <T> transport request type
+         * @param <T>
          */
         @Override
         public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(

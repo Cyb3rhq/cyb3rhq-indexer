@@ -55,7 +55,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Semaphore;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.hamcrest.Matchers.containsString;
@@ -79,7 +78,7 @@ public class TaskBatcherTests extends TaskExecutorTests {
         }
 
         @Override
-        protected void run(Object batchingKey, List<? extends BatchedTask> tasks, Function<Boolean, String> taskSummaryGenerator) {
+        protected void run(Object batchingKey, List<? extends BatchedTask> tasks, String tasksSummary) {
             List<UpdateTask> updateTasks = (List) tasks;
             ((TestExecutor) batchingKey).execute(updateTasks.stream().map(t -> t.task).collect(Collectors.toList()));
             updateTasks.forEach(updateTask -> updateTask.listener.processed(updateTask.source));
@@ -219,8 +218,7 @@ public class TaskBatcherTests extends TaskExecutorTests {
             executors[i] = new TaskExecutor();
         }
 
-        // it will create at most 8192 threads, which will cause native memory oom. so we limit the number of created threads.
-        int tasksSubmittedPerThread = randomIntBetween(2, 128);
+        int tasksSubmittedPerThread = randomIntBetween(2, 1024);
 
         CopyOnWriteArrayList<Tuple<String, Throwable>> failures = new CopyOnWriteArrayList<>();
         CountDownLatch updateLatch = new CountDownLatch(numberOfThreads * tasksSubmittedPerThread);
@@ -288,7 +286,7 @@ public class TaskBatcherTests extends TaskExecutorTests {
             executors[i] = new TaskExecutor();
         }
 
-        int tasksSubmittedPerThread = randomIntBetween(2, 128);
+        int tasksSubmittedPerThread = randomIntBetween(2, 1024);
 
         CopyOnWriteArrayList<Tuple<String, Throwable>> failures = new CopyOnWriteArrayList<>();
         CountDownLatch updateLatch = new CountDownLatch(numberOfThreads * tasksSubmittedPerThread);

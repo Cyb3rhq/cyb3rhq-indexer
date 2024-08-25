@@ -35,7 +35,6 @@ package org.opensearch.threadpool;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.Version;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.settings.Setting;
@@ -115,7 +114,6 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
         public static final String REMOTE_PURGE = "remote_purge";
         public static final String REMOTE_REFRESH_RETRY = "remote_refresh_retry";
         public static final String REMOTE_RECOVERY = "remote_recovery";
-        public static final String REMOTE_STATE_READ = "remote_state_read";
         public static final String INDEX_SEARCHER = "index_searcher";
     }
 
@@ -128,7 +126,7 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
     public enum ThreadPoolType {
         DIRECT("direct"),
         FIXED("fixed"),
-        RESIZABLE("resizable"),
+        FIXED_AUTO_QUEUE_SIZE("fixed_auto_queue_size"),
         SCALING("scaling");
 
         private final String type;
@@ -170,7 +168,7 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
         map.put(Names.GET, ThreadPoolType.FIXED);
         map.put(Names.ANALYZE, ThreadPoolType.FIXED);
         map.put(Names.WRITE, ThreadPoolType.FIXED);
-        map.put(Names.SEARCH, ThreadPoolType.RESIZABLE);
+        map.put(Names.SEARCH, ThreadPoolType.FIXED_AUTO_QUEUE_SIZE);
         map.put(Names.MANAGEMENT, ThreadPoolType.SCALING);
         map.put(Names.FLUSH, ThreadPoolType.SCALING);
         map.put(Names.REFRESH, ThreadPoolType.SCALING);
@@ -179,7 +177,7 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
         map.put(Names.FORCE_MERGE, ThreadPoolType.FIXED);
         map.put(Names.FETCH_SHARD_STARTED, ThreadPoolType.SCALING);
         map.put(Names.FETCH_SHARD_STORE, ThreadPoolType.SCALING);
-        map.put(Names.SEARCH_THROTTLED, ThreadPoolType.RESIZABLE);
+        map.put(Names.SEARCH_THROTTLED, ThreadPoolType.FIXED_AUTO_QUEUE_SIZE);
         map.put(Names.SYSTEM_READ, ThreadPoolType.FIXED);
         map.put(Names.SYSTEM_WRITE, ThreadPoolType.FIXED);
         map.put(Names.TRANSLOG_TRANSFER, ThreadPoolType.SCALING);
@@ -187,8 +185,7 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
         map.put(Names.REMOTE_PURGE, ThreadPoolType.SCALING);
         map.put(Names.REMOTE_REFRESH_RETRY, ThreadPoolType.SCALING);
         map.put(Names.REMOTE_RECOVERY, ThreadPoolType.SCALING);
-        map.put(Names.REMOTE_STATE_READ, ThreadPoolType.SCALING);
-        map.put(Names.INDEX_SEARCHER, ThreadPoolType.RESIZABLE);
+        map.put(Names.INDEX_SEARCHER, ThreadPoolType.FIXED_AUTO_QUEUE_SIZE);
         THREAD_POOL_TYPES = Collections.unmodifiableMap(map);
     }
 
@@ -240,9 +237,21 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
         builders.put(Names.ANALYZE, new FixedExecutorBuilder(settings, Names.ANALYZE, 1, 16));
         builders.put(
             Names.SEARCH,
-            new ResizableExecutorBuilder(settings, Names.SEARCH, searchThreadPoolSize(allocatedProcessors), 1000, runnableTaskListener)
+            new AutoQueueAdjustingExecutorBuilder(
+                settings,
+                Names.SEARCH,
+                searchThreadPoolSize(allocatedProcessors),
+                1000,
+                1000,
+                1000,
+                2000,
+                runnableTaskListener
+            )
         );
-        builders.put(Names.SEARCH_THROTTLED, new ResizableExecutorBuilder(settings, Names.SEARCH_THROTTLED, 1, 100, runnableTaskListener));
+        builders.put(
+            Names.SEARCH_THROTTLED,
+            new AutoQueueAdjustingExecutorBuilder(settings, Names.SEARCH_THROTTLED, 1, 100, 100, 100, 200, runnableTaskListener)
+        );
         builders.put(Names.MANAGEMENT, new ScalingExecutorBuilder(Names.MANAGEMENT, 1, 5, TimeValue.timeValueMinutes(5)));
         // no queue as this means clients will need to handle rejections on listener queue even if the operation succeeded
         // the assumption here is that the listeners should be very lightweight on the listeners side
@@ -282,21 +291,15 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
             )
         );
         builders.put(
-            Names.REMOTE_STATE_READ,
-            new ScalingExecutorBuilder(
-                Names.REMOTE_STATE_READ,
-                1,
-                twiceAllocatedProcessors(allocatedProcessors),
-                TimeValue.timeValueMinutes(5)
-            )
-        );
-        builders.put(
             Names.INDEX_SEARCHER,
-            new ResizableExecutorBuilder(
+            new AutoQueueAdjustingExecutorBuilder(
                 settings,
                 Names.INDEX_SEARCHER,
                 twiceAllocatedProcessors(allocatedProcessors),
                 1000,
+                1000,
+                1000,
+                2000,
                 runnableTaskListener
             )
         );
@@ -783,13 +786,7 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
 
         public Info(StreamInput in) throws IOException {
             name = in.readString();
-            final String typeStr = in.readString();
-            // Opensearch on or after 3.0.0 version doesn't know about "fixed_auto_queue_size" thread pool. Convert it to RESIZABLE.
-            if (typeStr.equalsIgnoreCase("fixed_auto_queue_size")) {
-                type = ThreadPoolType.RESIZABLE;
-            } else {
-                type = ThreadPoolType.fromType(typeStr);
-            }
+            type = ThreadPoolType.fromType(in.readString());
             min = in.readInt();
             max = in.readInt();
             keepAlive = in.readOptionalTimeValue();
@@ -799,13 +796,7 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             out.writeString(name);
-            if (type == ThreadPoolType.RESIZABLE && out.getVersion().before(Version.V_3_0_0)) {
-                // Opensearch on older version doesn't know about "resizable" thread pool. Convert RESIZABLE to FIXED
-                // to avoid serialization/de-serization issue between nodes with different OpenSearch version
-                out.writeString(ThreadPoolType.FIXED.getType());
-            } else {
-                out.writeString(type.getType());
-            }
+            out.writeString(type.getType());
             out.writeInt(min);
             out.writeInt(max);
             out.writeOptionalTimeValue(keepAlive);

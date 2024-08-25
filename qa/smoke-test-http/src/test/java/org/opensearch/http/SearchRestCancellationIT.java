@@ -31,8 +31,8 @@
 
 package org.opensearch.http;
 
-import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
+import org.apache.http.entity.ContentType;
+import org.apache.http.nio.entity.NByteArrayEntity;
 import org.apache.logging.log4j.LogManager;
 import org.opensearch.action.admin.cluster.node.info.NodeInfo;
 import org.opensearch.action.admin.cluster.node.info.NodesInfoResponse;
@@ -110,7 +110,7 @@ public class SearchRestCancellationIT extends HttpSmokeTestCase {
                 new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))));
         Request restRequest = new Request("POST", "/_msearch");
         byte[] requestBody = MultiSearchRequest.writeMultiLineFormat(multiSearchRequest, contentType.xContent());
-        restRequest.setEntity(new ByteArrayEntity(requestBody, createContentType(contentType)));
+        restRequest.setEntity(new NByteArrayEntity(requestBody, createContentType(contentType)));
         verifyCancellationDuringQueryPhase(MultiSearchAction.NAME, restRequest);
     }
 
@@ -159,7 +159,7 @@ public class SearchRestCancellationIT extends HttpSmokeTestCase {
                 new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))));
         Request restRequest = new Request("POST", "/_msearch");
         byte[] requestBody = MultiSearchRequest.writeMultiLineFormat(multiSearchRequest, contentType.xContent());
-        restRequest.setEntity(new ByteArrayEntity(requestBody, createContentType(contentType)));
+        restRequest.setEntity(new NByteArrayEntity(requestBody, createContentType(contentType)));
         verifyCancellationDuringFetchPhase(MultiSearchAction.NAME, restRequest);
     }
 

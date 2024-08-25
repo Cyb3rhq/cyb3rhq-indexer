@@ -59,7 +59,6 @@ import org.opensearch.common.UUIDs;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Setting.Property;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsException;
 import org.opensearch.common.util.BigArrays;
 import org.opensearch.common.util.PageCacheRecycler;
 import org.opensearch.common.util.concurrent.ThreadContext;
@@ -99,7 +98,6 @@ import org.opensearch.index.store.RemoteSegmentStoreDirectoryFactory;
 import org.opensearch.index.translog.InternalTranslogFactory;
 import org.opensearch.index.translog.RemoteBlobStoreInternalTranslogFactory;
 import org.opensearch.index.translog.TranslogFactory;
-import org.opensearch.indices.DefaultRemoteStoreSettings;
 import org.opensearch.indices.IndicesModule;
 import org.opensearch.indices.IndicesQueryCache;
 import org.opensearch.indices.analysis.AnalysisModule;
@@ -237,8 +235,7 @@ public class IndexModuleTests extends OpenSearchTestCase {
                     repositoriesServiceReference::get,
                     threadPool,
                     indexSettings.getRemoteStoreTranslogRepository(),
-                    new RemoteTranslogTransferTracker(shardRouting.shardId(), 10),
-                    DefaultRemoteStoreSettings.INSTANCE
+                    new RemoteTranslogTransferTracker(shardRouting.shardId(), 10)
                 );
             }
             return new InternalTranslogFactory();
@@ -263,8 +260,8 @@ public class IndexModuleTests extends OpenSearchTestCase {
             new RemoteSegmentStoreDirectoryFactory(() -> repositoriesService, threadPool),
             translogFactorySupplier,
             () -> IndexSettings.DEFAULT_REFRESH_INTERVAL,
-            DefaultRecoverySettings.INSTANCE,
-            DefaultRemoteStoreSettings.INSTANCE
+            () -> IndexSettings.DEFAULT_REMOTE_TRANSLOG_BUFFER_INTERVAL,
+            DefaultRecoverySettings.INSTANCE
         );
     }
 
@@ -344,7 +341,7 @@ public class IndexModuleTests extends OpenSearchTestCase {
         try {
             module.addSettingsUpdateConsumer(booleanSetting2, atomicBoolean::set);
             fail("not registered");
-        } catch (SettingsException ex) {
+        } catch (IllegalArgumentException ex) {
 
         }
 

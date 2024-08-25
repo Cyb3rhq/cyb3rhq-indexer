@@ -40,8 +40,6 @@ import org.opensearch.action.FailedNodeException;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.action.RoutingMissingException;
 import org.opensearch.action.TimestampParsingException;
-import org.opensearch.action.admin.indices.view.ViewAlreadyExistsException;
-import org.opensearch.action.admin.indices.view.ViewNotFoundException;
 import org.opensearch.action.search.SearchPhaseExecutionException;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.action.support.replication.ReplicationOperation;
@@ -404,13 +402,17 @@ public class ExceptionSerializationTests extends OpenSearchTestCase {
         Version version = VersionUtils.randomVersion(random());
         SearchContextMissingException ex = serialize(new SearchContextMissingException(contextId), version);
         assertThat(ex.contextId().getId(), equalTo(contextId.getId()));
-        assertThat(ex.contextId().getSessionId(), equalTo(contextId.getSessionId()));
+        if (version.onOrAfter(LegacyESVersion.V_7_7_0)) {
+            assertThat(ex.contextId().getSessionId(), equalTo(contextId.getSessionId()));
+        } else {
+            assertThat(ex.contextId().getSessionId(), equalTo(""));
+        }
     }
 
     public void testCircuitBreakingException() throws IOException {
         CircuitBreakingException ex = serialize(
             new CircuitBreakingException("Too large", 0, 100, CircuitBreaker.Durability.TRANSIENT),
-            Version.V_2_0_0
+            LegacyESVersion.V_7_0_0
         );
         assertEquals("Too large", ex.getMessage());
         assertEquals(100, ex.getByteLimit());
@@ -894,8 +896,6 @@ public class ExceptionSerializationTests extends OpenSearchTestCase {
         ids.put(169, NodeWeighedAwayException.class);
         ids.put(170, SearchPipelineProcessingException.class);
         ids.put(171, CryptoRegistryException.class);
-        ids.put(172, ViewNotFoundException.class);
-        ids.put(173, ViewAlreadyExistsException.class);
         ids.put(10001, IndexCreateBlockException.class);
 
         Map<Class<? extends OpenSearchException>, Integer> reverse = new HashMap<>();

@@ -32,6 +32,7 @@
 
 package org.opensearch.action.fieldcaps;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.ParseField;
@@ -90,7 +91,11 @@ public class FieldCapabilitiesResponse extends ActionResponse implements ToXCont
 
     public FieldCapabilitiesResponse(StreamInput in) throws IOException {
         super(in);
-        indices = in.readStringArray();
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_2_0)) {
+            indices = in.readStringArray();
+        } else {
+            indices = Strings.EMPTY_ARRAY;
+        }
         this.responseMap = in.readMap(StreamInput::readString, FieldCapabilitiesResponse::readField);
         indexResponses = in.readList(FieldCapabilitiesIndexResponse::new);
     }
@@ -137,7 +142,9 @@ public class FieldCapabilitiesResponse extends ActionResponse implements ToXCont
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeStringArray(indices);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_2_0)) {
+            out.writeStringArray(indices);
+        }
         out.writeMap(responseMap, StreamOutput::writeString, FieldCapabilitiesResponse::writeField);
         out.writeList(indexResponses);
     }

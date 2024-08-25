@@ -110,7 +110,7 @@ public class PercolatorQuerySearchIT extends ParameterizedStaticSettingsOpenSear
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(PercolatorModulePlugin.class, GeoModulePlugin.class);
+        return Arrays.asList(PercolatorPlugin.class, GeoModulePlugin.class);
     }
 
     public void testPercolatorQuery() throws Exception {

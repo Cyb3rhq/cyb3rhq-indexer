@@ -32,6 +32,7 @@
 
 package org.opensearch.action.admin.indices.create;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchGenerationException;
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.Version;
@@ -126,6 +127,9 @@ public class CreateIndexRequest extends AcknowledgedRequest<CreateIndexRequest> 
         int aliasesSize = in.readVInt();
         for (int i = 0; i < aliasesSize; i++) {
             aliases.add(new Alias(in));
+        }
+        if (in.getVersion().before(LegacyESVersion.V_7_0_0)) {
+            in.readBoolean(); // updateAllTypes
         }
         waitForActiveShards = ActiveShardCount.readFrom(in);
     }
@@ -591,6 +595,9 @@ public class CreateIndexRequest extends AcknowledgedRequest<CreateIndexRequest> 
         out.writeVInt(aliases.size());
         for (Alias alias : aliases) {
             alias.writeTo(out);
+        }
+        if (out.getVersion().before(LegacyESVersion.V_7_0_0)) {
+            out.writeBoolean(true); // updateAllTypes
         }
         waitForActiveShards.writeTo(out);
     }

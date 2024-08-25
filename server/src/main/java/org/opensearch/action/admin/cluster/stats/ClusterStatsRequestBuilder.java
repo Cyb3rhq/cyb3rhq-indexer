@@ -50,9 +50,4 @@ public class ClusterStatsRequestBuilder extends NodesOperationRequestBuilder<
     public ClusterStatsRequestBuilder(OpenSearchClient client, ClusterStatsAction action) {
         super(client, action, new ClusterStatsRequest());
     }
-
-    public final ClusterStatsRequestBuilder useAggregatedNodeLevelResponses(boolean useAggregatedNodeLevelResponses) {
-        request.useAggregatedNodeLevelResponses(useAggregatedNodeLevelResponses);
-        return this;
-    }
 }

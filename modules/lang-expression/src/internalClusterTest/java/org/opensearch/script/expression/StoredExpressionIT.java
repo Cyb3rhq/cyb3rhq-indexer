@@ -76,7 +76,7 @@ public class StoredExpressionIT extends ParameterizedStaticSettingsOpenSearchInt
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singleton(ExpressionModulePlugin.class);
+        return Collections.singleton(ExpressionPlugin.class);
     }
 
     public void testAllOpsDisabledIndexedScripts() throws IOException {

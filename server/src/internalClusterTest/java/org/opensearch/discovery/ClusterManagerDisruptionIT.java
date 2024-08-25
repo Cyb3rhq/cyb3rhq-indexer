@@ -85,7 +85,6 @@ public class ClusterManagerDisruptionIT extends AbstractDisruptionTestCase {
             30000,
             60000
         );
-
         internalCluster().setDisruptionScheme(clusterManagerNodeDisruption);
         clusterManagerNodeDisruption.startDisrupting();
 
@@ -198,15 +197,11 @@ public class ClusterManagerDisruptionIT extends AbstractDisruptionTestCase {
                             + nodeState
                     );
                 }
+
             }
-
+            ClusterStateStats clusterStateStats = internalCluster().clusterService().getClusterManagerService().getClusterStateStats();
+            assertTrue(clusterStateStats.getUpdateFailed() > 0);
         });
-
-        ClusterStateStats clusterStateStats = internalCluster().clusterService(isolatedNode)
-            .getClusterManagerService()
-            .getClusterStateStats();
-        assertTrue(clusterStateStats.getUpdateFailed() > 0);
-
     }
 
     /**

@@ -33,6 +33,7 @@
 package org.opensearch.snapshots;
 
 import org.opensearch.Version;
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotRequest;
 import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
 import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsResponse;
 import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
@@ -42,6 +43,7 @@ import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusRespo
 import org.opensearch.action.admin.indices.stats.ShardStats;
 import org.opensearch.action.index.IndexRequestBuilder;
 import org.opensearch.action.support.ActiveShardCount;
+import org.opensearch.action.support.PlainActionFuture;
 import org.opensearch.action.support.master.AcknowledgedResponse;
 import org.opensearch.client.Client;
 import org.opensearch.client.node.NodeClient;
@@ -572,7 +574,7 @@ public class DedicatedClusterSnapshotRestoreIT extends AbstractSnapshotIntegTest
                 List<SnapshotStatus> snapshotStatuses = snapshotsStatusResponse.getSnapshots();
                 assertEquals(snapshotStatuses.size(), 1);
                 logger.trace("current snapshot status [{}]", snapshotStatuses.get(0));
-                assertThat(getSnapshot("test-repo", "test-snap-2").state(), equalTo(SnapshotState.PARTIAL));
+                assertTrue(snapshotStatuses.get(0).getState().completed());
             }, 1, TimeUnit.MINUTES);
             SnapshotsStatusResponse snapshotsStatusResponse = clusterAdmin().prepareSnapshotStatus("test-repo")
                 .setSnapshots("test-snap-2")
@@ -589,6 +591,7 @@ public class DedicatedClusterSnapshotRestoreIT extends AbstractSnapshotIntegTest
             // After it was marked as completed in the cluster state - we need to check if it's completed on the file system as well
             assertBusy(() -> {
                 SnapshotInfo snapshotInfo = getSnapshot("test-repo", "test-snap-2");
+                assertTrue(snapshotInfo.state().completed());
                 assertEquals(SnapshotState.PARTIAL, snapshotInfo.state());
             }, 1, TimeUnit.MINUTES);
         } else {
@@ -1380,6 +1383,44 @@ public class DedicatedClusterSnapshotRestoreIT extends AbstractSnapshotIntegTest
         ensureStableCluster(1);
         final CreateSnapshotResponse createSnapshotResponse = startFullSnapshot(repoName, "test-snap", true).get();
         assertThat(createSnapshotResponse.getSnapshotInfo().state(), is(SnapshotState.PARTIAL));
+    }
+
+    /**
+     * Tests for the legacy snapshot path that is normally executed if the cluster contains any nodes older than
+     * {@link SnapshotsService#NO_REPO_INITIALIZE_VERSION}.
+     * Makes sure that blocking as well as non-blocking snapshot create paths execute cleanly as well as that error handling works out
+     * correctly by testing a snapshot name collision.
+     */
+    public void testCreateSnapshotLegacyPath() throws Exception {
+        final String clusterManagerNode = internalCluster().startClusterManagerOnlyNode();
+        internalCluster().startDataOnlyNode();
+        final String repoName = "test-repo";
+        createRepository(repoName, "fs");
+        createIndex("some-index");
+
+        final SnapshotsService snapshotsService = internalCluster().getClusterManagerNodeInstance(SnapshotsService.class);
+        final Snapshot snapshot1 = PlainActionFuture.get(
+            f -> snapshotsService.createSnapshotLegacy(new CreateSnapshotRequest(repoName, "snap-1"), f)
+        );
+        awaitNoMoreRunningOperations(clusterManagerNode);
+
+        final InvalidSnapshotNameException sne = expectThrows(
+            InvalidSnapshotNameException.class,
+            () -> PlainActionFuture.<SnapshotInfo, Exception>get(
+                f -> snapshotsService.executeSnapshotLegacy(new CreateSnapshotRequest(repoName, snapshot1.getSnapshotId().getName()), f)
+            )
+        );
+
+        assertThat(sne.getMessage(), containsString("snapshot with the same name already exists"));
+        final SnapshotInfo snapshot2 = PlainActionFuture.get(
+            f -> snapshotsService.executeSnapshotLegacy(new CreateSnapshotRequest(repoName, "snap-2"), f)
+        );
+        assertThat(snapshot2.state(), is(SnapshotState.SUCCESS));
+
+        final SnapshotInfo snapshot3 = PlainActionFuture.get(
+            f -> snapshotsService.executeSnapshotLegacy(new CreateSnapshotRequest(repoName, "snap-3").indices("does-not-exist-*"), f)
+        );
+        assertThat(snapshot3.state(), is(SnapshotState.SUCCESS));
     }
 
     public void testSnapshotDeleteRelocatingPrimaryIndex() throws Exception {

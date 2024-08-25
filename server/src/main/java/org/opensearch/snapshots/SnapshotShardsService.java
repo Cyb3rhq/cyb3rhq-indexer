@@ -67,6 +67,7 @@ import org.opensearch.indices.IndicesService;
 import org.opensearch.repositories.IndexId;
 import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.repositories.Repository;
+import org.opensearch.repositories.ShardGenerations;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.TransportException;
 import org.opensearch.transport.TransportRequestDeduplicator;
@@ -276,47 +277,58 @@ public class SnapshotShardsService extends AbstractLifecycleComponent implements
                 final IndexShardSnapshotStatus snapshotStatus = shardEntry.getValue();
                 final IndexId indexId = indicesMap.get(shardId.getIndexName());
                 assert indexId != null;
-                snapshot(
-                    shardId,
-                    snapshot,
-                    indexId,
-                    entry.userMetadata(),
-                    snapshotStatus,
-                    entry.version(),
-                    entry.remoteStoreIndexShallowCopy(),
-                    new ActionListener<>() {
-                        @Override
-                        public void onResponse(String newGeneration) {
-                            assert newGeneration != null;
-                            assert newGeneration.equals(snapshotStatus.generation());
-                            if (logger.isDebugEnabled()) {
-                                final IndexShardSnapshotStatus.Copy lastSnapshotStatus = snapshotStatus.asCopy();
-                                logger.debug(
-                                    "snapshot [{}] completed to [{}] with [{}] at generation [{}]",
-                                    snapshot,
-                                    snapshot.getRepository(),
-                                    lastSnapshotStatus,
-                                    snapshotStatus.generation()
-                                );
+                if (isRemoteSnapshot(shardId)) {
+                    // If the source of the data is another remote snapshot (i.e. searchable snapshot)
+                    // then no need to snapshot the shard and can immediately notify success.
+                    notifySuccessfulSnapshotShard(snapshot, shardId, snapshotStatus.generation());
+                } else {
+                    assert SnapshotsService.useShardGenerations(entry.version())
+                        || ShardGenerations.fixShardGeneration(snapshotStatus.generation()) == null
+                        : "Found non-null, non-numeric shard generation ["
+                            + snapshotStatus.generation()
+                            + "] for snapshot with old-format compatibility";
+                    snapshot(
+                        shardId,
+                        snapshot,
+                        indexId,
+                        entry.userMetadata(),
+                        snapshotStatus,
+                        entry.version(),
+                        entry.remoteStoreIndexShallowCopy(),
+                        new ActionListener<>() {
+                            @Override
+                            public void onResponse(String newGeneration) {
+                                assert newGeneration != null;
+                                assert newGeneration.equals(snapshotStatus.generation());
+                                if (logger.isDebugEnabled()) {
+                                    final IndexShardSnapshotStatus.Copy lastSnapshotStatus = snapshotStatus.asCopy();
+                                    logger.debug(
+                                        "snapshot [{}] completed to [{}] with [{}] at generation [{}]",
+                                        snapshot,
+                                        snapshot.getRepository(),
+                                        lastSnapshotStatus,
+                                        snapshotStatus.generation()
+                                    );
+                                }
+                                notifySuccessfulSnapshotShard(snapshot, shardId, newGeneration);
                             }
-                            notifySuccessfulSnapshotShard(snapshot, shardId, newGeneration);
-                        }
 
-                        @Override
-                        public void onFailure(Exception e) {
-                            final String failure;
-                            if (e instanceof AbortedSnapshotException) {
-                                failure = "aborted";
-                                logger.debug(() -> new ParameterizedMessage("[{}][{}] aborted shard snapshot", shardId, snapshot), e);
-                            } else {
-                                failure = summarizeFailure(e);
-                                logger.warn(() -> new ParameterizedMessage("[{}][{}] failed to snapshot shard", shardId, snapshot), e);
+                            @Override
+                            public void onFailure(Exception e) {
+                                final String failure;
+                                if (e instanceof AbortedSnapshotException) {
+                                    failure = "aborted";
+                                    logger.debug(() -> new ParameterizedMessage("[{}][{}] aborted shard snapshot", shardId, snapshot), e);
+                                } else {
+                                    failure = summarizeFailure(e);
+                                    logger.warn(() -> new ParameterizedMessage("[{}][{}] failed to snapshot shard", shardId, snapshot), e);
+                                }
+                                snapshotStatus.moveToFailed(threadPool.absoluteTimeInMillis(), failure);
+                                notifyFailedSnapshotShard(snapshot, shardId, failure);
                             }
-                            snapshotStatus.moveToFailed(threadPool.absoluteTimeInMillis(), failure);
-                            notifyFailedSnapshotShard(snapshot, shardId, failure);
                         }
-                    }
-                );
+                    );
+                }
             }
         });
     }
@@ -375,7 +387,7 @@ public class SnapshotShardsService extends AbstractLifecycleComponent implements
             if (indexShard.routingEntry().primary() == false) {
                 throw new IndexShardSnapshotFailedException(shardId, "snapshot should be performed only on primary");
             }
-            if (indexShard.indexSettings().isSegRepEnabledOrRemoteNode() && indexShard.isPrimaryMode() == false) {
+            if (indexShard.indexSettings().isSegRepEnabled() && indexShard.isPrimaryMode() == false) {
                 throw new IndexShardSnapshotFailedException(
                     shardId,
                     "snapshot triggered on a new primary following failover and cannot proceed until promotion is complete"
@@ -536,7 +548,7 @@ public class SnapshotShardsService extends AbstractLifecycleComponent implements
                                 // but we think the shard is done - we need to make new cluster-manager know that the shard is done
                                 logger.debug(
                                     "[{}] new cluster-manager thinks the shard [{}] is not completed but the shard is done locally, "
-                                        + "updating status on the master",
+                                        + "updating status on the cluster-manager",
                                     snapshot.snapshot(),
                                     shardId
                                 );
@@ -546,7 +558,7 @@ public class SnapshotShardsService extends AbstractLifecycleComponent implements
                                 // but we think the shard failed - we need to make new cluster-manager know that the shard failed
                                 logger.debug(
                                     "[{}] new cluster-manager thinks the shard [{}] is not completed but the shard failed locally, "
-                                        + "updating status on master",
+                                        + "updating status on cluster-manager",
                                     snapshot.snapshot(),
                                     shardId
                                 );

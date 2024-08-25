@@ -204,10 +204,6 @@ public class RoutingNode implements Iterable<ShardRouting> {
         return shards.size();
     }
 
-    public Collection<ShardRouting> getInitializingShards() {
-        return initializingShards;
-    }
-
     /**
      * Add a new shard to this node
      * @param shard Shard to create on this Node

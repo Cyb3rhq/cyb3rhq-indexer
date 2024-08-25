@@ -68,7 +68,7 @@ public class GeoBoundsGeoShapeAggregatorTests extends AggregatorTestCase {
     /**
      * Testing Empty aggregator results.
      *
-     * @throws Exception if an error occurs accessing the index
+     * @throws Exception
      */
     public void testEmpty() throws Exception {
         try (Directory dir = newDirectory(); RandomIndexWriter w = new RandomIndexWriter(random(), dir)) {
@@ -93,7 +93,7 @@ public class GeoBoundsGeoShapeAggregatorTests extends AggregatorTestCase {
     /**
      * Testing GeoBoundAggregator for random shapes which are indexed.
      *
-     * @throws Exception if an error occurs accessing the index
+     * @throws Exception
      */
     public void testRandom() throws Exception {
         final int numDocs = randomIntBetween(50, 100);

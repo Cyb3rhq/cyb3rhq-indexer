@@ -187,16 +187,10 @@ public class AggregationProcessorTests extends AggregationSetupTests {
         AggregationCollectorManager collectorManager;
         if (expectedNonGlobalAggsPerSlice > 0) {
             collectorManager = (AggregationCollectorManager) context.queryCollectorManagers().get(NonGlobalAggCollectorManager.class);
-            for (Collector c : nonGlobalCollectors) {
-                context.bucketCollectorProcessor().processPostCollection(c);
-            }
             collectorManager.reduce(nonGlobalCollectors).reduce(context.queryResult());
         }
         if (expectedGlobalAggs > 0) {
             collectorManager = (AggregationCollectorManager) context.queryCollectorManagers().get(GlobalAggCollectorManager.class);
-            for (Collector c : globalCollectors) {
-                context.bucketCollectorProcessor().processPostCollection(c);
-            }
             ReduceableSearchResult result = collectorManager.reduce(globalCollectors);
             doReturn(result).when(testSearcher)
                 .search(nullable(Query.class), ArgumentMatchers.<CollectorManager<?, ReduceableSearchResult>>any());
@@ -222,6 +216,7 @@ public class AggregationProcessorTests extends AggregationSetupTests {
         // after shard level reduce it should have only 1 InternalAggregation instance for each agg in request and internal aggregation
         // will be equal to sum of expected global and nonglobal aggs
         assertEquals(expectedNonGlobalAggsPerSlice + expectedGlobalAggs, context.queryResult().aggregations().expand().aggregations.size());
+        assertNotNull(context.queryResult().aggregations().expand().getPipelineTreeForBwcSerialization());
         assertNull(context.aggregations());
         assertTrue(context.queryCollectorManagers().isEmpty());
     }

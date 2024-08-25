@@ -58,7 +58,7 @@ public class RankFeaturesFieldMapperTests extends MapperTestCase {
 
     @Override
     protected Collection<? extends Plugin> getPlugins() {
-        return List.of(new MapperExtrasModulePlugin());
+        return List.of(new MapperExtrasPlugin());
     }
 
     @Override

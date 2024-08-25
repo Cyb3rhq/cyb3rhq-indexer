@@ -32,7 +32,6 @@
 
 package org.opensearch.http;
 
-import org.opensearch.Build;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.io.stream.ReleasableBytesStreamOutput;
@@ -58,11 +57,11 @@ import static org.opensearch.tasks.Task.X_OPAQUE_ID;
 
 /**
  * The default rest channel for incoming requests. This class implements the basic logic for sending a rest
- * response. It will set necessary headers and ensure that bytes are released after the response is sent.
+ * response. It will set necessary headers nad ensure that bytes are released after the response is sent.
  *
  * @opensearch.internal
  */
-class DefaultRestChannel extends AbstractRestChannel implements RestChannel {
+public class DefaultRestChannel extends AbstractRestChannel implements RestChannel {
 
     static final String CLOSE = "close";
     static final String CONNECTION = "connection";
@@ -70,12 +69,6 @@ class DefaultRestChannel extends AbstractRestChannel implements RestChannel {
     static final String CONTENT_TYPE = "content-type";
     static final String CONTENT_LENGTH = "content-length";
     static final String SET_COOKIE = "set-cookie";
-    static final String SERVER_VERSION = "X-OpenSearch-Version";
-    static final String SERVER_VERSION_VALUE = "OpenSearch/"
-        + Build.CURRENT.getQualifiedVersion()
-        + " ("
-        + Build.CURRENT.getDistribution()
-        + ")";
 
     private final HttpRequest httpRequest;
     private final BigArrays bigArrays;
@@ -83,7 +76,6 @@ class DefaultRestChannel extends AbstractRestChannel implements RestChannel {
     private final ThreadContext threadContext;
     private final HttpChannel httpChannel;
     private final CorsHandler corsHandler;
-    private final Map<String, List<String>> SERVER_VERSION_HEADER = Map.of(SERVER_VERSION, List.of(SERVER_VERSION_VALUE));
 
     @Nullable
     private final HttpTracer tracerLog;
@@ -154,8 +146,6 @@ class DefaultRestChannel extends AbstractRestChannel implements RestChannel {
             // Add all custom headers
             addCustomHeaders(httpResponse, restResponse.getHeaders());
             addCustomHeaders(httpResponse, threadContext.getResponseHeaders());
-
-            addCustomHeaders(httpResponse, SERVER_VERSION_HEADER);
 
             // If our response doesn't specify a content-type header, set one
             setHeaderField(httpResponse, CONTENT_TYPE, restResponse.contentType(), false);

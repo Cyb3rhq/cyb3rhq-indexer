@@ -29,8 +29,6 @@
 
 package org.opensearch.common.inject;
 
-import org.opensearch.common.annotation.PublicApi;
-
 /**
  * An object capable of providing instances of type {@code T}. Providers are used in numerous ways
  * by Guice:
@@ -52,9 +50,8 @@ import org.opensearch.common.annotation.PublicApi;
  * @param <T> the type of object this provides
  * @author crazybob@google.com (Bob Lee)
  *
- * @opensearch.api
+ * @opensearch.internal
  */
-@PublicApi(since = "1.0.0")
 public interface Provider<T> {
 
     /**

@@ -13,7 +13,6 @@ import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import org.opensearch.action.LatchedActionListener;
 import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
 import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
-import org.opensearch.action.admin.indices.flush.FlushRequest;
 import org.opensearch.action.admin.indices.stats.IndicesStatsRequest;
 import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
 import org.opensearch.action.search.CreatePitAction;
@@ -27,7 +26,6 @@ import org.opensearch.action.search.GetAllPitNodesResponse;
 import org.opensearch.action.search.GetAllPitsAction;
 import org.opensearch.action.search.PitTestsUtil;
 import org.opensearch.action.search.SearchResponse;
-import org.opensearch.client.Requests;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.common.action.ActionFuture;
 import org.opensearch.common.settings.Settings;
@@ -104,7 +102,7 @@ public class PitMultiNodeIT extends ParameterizedStaticSettingsOpenSearchIntegTe
         assertEquals(2, searchResponse.getSuccessfulShards());
         assertEquals(2, searchResponse.getTotalShards());
         validatePitStats("index", 2, 2);
-        PitTestsUtil.assertUsingGetAllPits(client(), pitResponse.getId(), pitResponse.getCreationTime(), TimeValue.timeValueDays(1));
+        PitTestsUtil.assertUsingGetAllPits(client(), pitResponse.getId(), pitResponse.getCreationTime());
         assertSegments(false, client(), pitResponse.getId());
     }
 
@@ -131,12 +129,7 @@ public class PitMultiNodeIT extends ParameterizedStaticSettingsOpenSearchIntegTe
             public Settings onNodeStopped(String nodeName) throws Exception {
                 ActionFuture<CreatePitResponse> execute = client().execute(CreatePitAction.INSTANCE, request);
                 CreatePitResponse pitResponse = execute.get();
-                PitTestsUtil.assertUsingGetAllPits(
-                    client(),
-                    pitResponse.getId(),
-                    pitResponse.getCreationTime(),
-                    TimeValue.timeValueDays(1)
-                );
+                PitTestsUtil.assertUsingGetAllPits(client(), pitResponse.getId(), pitResponse.getCreationTime());
                 assertSegments(false, "index", 1, client(), pitResponse.getId());
                 assertEquals(1, pitResponse.getSuccessfulShards());
                 assertEquals(2, pitResponse.getTotalShards());
@@ -169,12 +162,7 @@ public class PitMultiNodeIT extends ParameterizedStaticSettingsOpenSearchIntegTe
                 assertEquals(0, searchResponse.getSkippedShards());
                 assertEquals(2, searchResponse.getTotalShards());
                 validatePitStats("index", 1, 1);
-                PitTestsUtil.assertUsingGetAllPits(
-                    client(),
-                    pitResponse.getId(),
-                    pitResponse.getCreationTime(),
-                    TimeValue.timeValueDays(1)
-                );
+                PitTestsUtil.assertUsingGetAllPits(client(), pitResponse.getId(), pitResponse.getCreationTime());
                 return super.onNodeStopped(nodeName);
             }
         });
@@ -366,12 +354,8 @@ public class PitMultiNodeIT extends ParameterizedStaticSettingsOpenSearchIntegTe
 
     public void validatePitStats(String index, long expectedPitCurrent, long expectedOpenContexts) throws ExecutionException,
         InterruptedException {
-        // Clear the index transaction log
-        FlushRequest flushRequest = Requests.flushRequest(index);
-        client().admin().indices().flush(flushRequest).get();
-        // Test stats
         IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
-        indicesStatsRequest.indices(index);
+        indicesStatsRequest.indices("index");
         indicesStatsRequest.all();
         IndicesStatsResponse indicesStatsResponse = client().admin().indices().stats(indicesStatsRequest).get();
         long pitCurrent = indicesStatsResponse.getIndex(index).getTotal().search.getTotal().getPitCurrent();

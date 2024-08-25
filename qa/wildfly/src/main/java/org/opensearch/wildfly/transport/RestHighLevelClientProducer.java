@@ -32,13 +32,12 @@
 
 package org.opensearch.wildfly.transport;
 
-import org.apache.hc.core5.http.HttpHost;
+import org.apache.http.HttpHost;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.RestHighLevelClient;
 import org.opensearch.common.SuppressForbidden;
 import org.opensearch.common.io.PathUtils;
 
-import java.net.URISyntaxException;
 import java.nio.file.Path;
 
 import jakarta.enterprise.inject.Produces;
@@ -47,7 +46,7 @@ import jakarta.enterprise.inject.Produces;
 public final class RestHighLevelClientProducer {
 
     @Produces
-    public RestHighLevelClient createRestHighLevelClient() throws URISyntaxException {
+    public RestHighLevelClient createRestHighLevelClient() {
         String httpUri = System.getProperty("opensearch.uri");
 
         return new RestHighLevelClient(RestClient.builder(HttpHost.create(httpUri)));

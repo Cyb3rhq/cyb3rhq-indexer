@@ -662,6 +662,11 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
         }
 
         @Override
+        public void initializeSnapshot(SnapshotId snapshotId, List<IndexId> indices, Metadata metadata) {
+
+        }
+
+        @Override
         public void finalizeSnapshot(
             ShardGenerations shardGenerations,
             long repositoryStateId,

@@ -33,6 +33,7 @@
 package org.opensearch.action.search;
 
 import org.apache.lucene.search.TotalHits;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.annotation.PublicApi;
@@ -89,6 +90,7 @@ public class SearchResponse extends ActionResponse implements StatusToXContentOb
     private static final ParseField TIMED_OUT = new ParseField("timed_out");
     private static final ParseField TERMINATED_EARLY = new ParseField("terminated_early");
     private static final ParseField NUM_REDUCE_PHASES = new ParseField("num_reduce_phases");
+    private static final ParseField EXT = new ParseField("ext");
 
     private final SearchResponseSections internalResponse;
     private final String scrollId;
@@ -100,6 +102,8 @@ public class SearchResponse extends ActionResponse implements StatusToXContentOb
     private final Clusters clusters;
     private final long tookInMillis;
     private final PhaseTook phaseTook;
+
+    private List<SearchExtBuilder> searchExtBuilders = new ArrayList<>();
 
     public SearchResponse(StreamInput in) throws IOException {
         super(in);
@@ -124,7 +128,11 @@ public class SearchResponse extends ActionResponse implements StatusToXContentOb
             phaseTook = null;
         }
         skippedShards = in.readVInt();
-        pointInTimeId = in.readOptionalString();
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            pointInTimeId = in.readOptionalString();
+        } else {
+            pointInTimeId = null;
+        }
     }
 
     public SearchResponse(
@@ -563,12 +571,18 @@ public class SearchResponse extends ActionResponse implements StatusToXContentOb
             out.writeOptionalWriteable(phaseTook);
         }
         out.writeVInt(skippedShards);
-        out.writeOptionalString(pointInTimeId);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            out.writeOptionalString(pointInTimeId);
+        }
     }
 
     @Override
     public String toString() {
         return Strings.toString(MediaTypeRegistry.JSON, this);
+    }
+
+    public void addSearchExtBuilder(SearchExtBuilder searchExtBuilder) {
+        this.searchExtBuilders.add(searchExtBuilder);
     }
 
     /**

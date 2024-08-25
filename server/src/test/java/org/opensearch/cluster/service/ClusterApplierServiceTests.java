@@ -35,7 +35,6 @@ package org.opensearch.cluster.service;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.opensearch.Version;
-import org.opensearch.cluster.ClusterManagerMetrics;
 import org.opensearch.cluster.ClusterName;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.ClusterStateObserver;
@@ -52,8 +51,6 @@ import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.telemetry.metrics.Histogram;
-import org.opensearch.telemetry.metrics.MetricsRegistry;
 import org.opensearch.test.MockLogAppender;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.test.junit.annotations.TestLogging;
@@ -67,7 +64,6 @@ import org.junit.BeforeClass;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -78,30 +74,15 @@ import static org.opensearch.test.ClusterServiceUtils.createNoOpNodeConnectionsS
 import static org.opensearch.test.ClusterServiceUtils.setState;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
 
 public class ClusterApplierServiceTests extends OpenSearchTestCase {
 
     private static ThreadPool threadPool;
     private TimedClusterApplierService clusterApplierService;
-    private static MetricsRegistry metricsRegistry;
-    private static Histogram applierslatencyHistogram;
-    private static Histogram listenerslatencyHistogram;
 
     @BeforeClass
     public static void createThreadPool() {
         threadPool = new TestThreadPool(ClusterApplierServiceTests.class.getName());
-        metricsRegistry = mock(MetricsRegistry.class);
-        applierslatencyHistogram = mock(Histogram.class);
-        listenerslatencyHistogram = mock(Histogram.class);
     }
 
     @AfterClass
@@ -115,14 +96,7 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        when(metricsRegistry.createHistogram(anyString(), anyString(), anyString())).thenAnswer(invocationOnMock -> {
-            String histogramName = (String) invocationOnMock.getArguments()[0];
-            if (histogramName.contains("appliers.latency")) {
-                return applierslatencyHistogram;
-            }
-            return listenerslatencyHistogram;
-        });
-        clusterApplierService = createTimedClusterService(true, Optional.of(metricsRegistry));
+        clusterApplierService = createTimedClusterService(true);
     }
 
     @After
@@ -131,26 +105,13 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
         super.tearDown();
     }
 
-    private TimedClusterApplierService createTimedClusterService(
-        boolean makeClusterManager,
-        Optional<MetricsRegistry> metricsRegistryOptional
-    ) {
+    private TimedClusterApplierService createTimedClusterService(boolean makeClusterManager) {
         DiscoveryNode localNode = new DiscoveryNode("node1", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT);
-        TimedClusterApplierService timedClusterApplierService;
-        if (metricsRegistryOptional != null && metricsRegistryOptional.isPresent()) {
-            timedClusterApplierService = new TimedClusterApplierService(
-                Settings.builder().put("cluster.name", "ClusterApplierServiceTests").build(),
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
-                threadPool,
-                new ClusterManagerMetrics(metricsRegistry)
-            );
-        } else {
-            timedClusterApplierService = new TimedClusterApplierService(
-                Settings.builder().put("cluster.name", "ClusterApplierServiceTests").build(),
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
-                threadPool
-            );
-        }
+        TimedClusterApplierService timedClusterApplierService = new TimedClusterApplierService(
+            Settings.builder().put("cluster.name", "ClusterApplierServiceTests").build(),
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
+            threadPool
+        );
         timedClusterApplierService.setNodeConnectionsService(createNoOpNodeConnectionsService());
         timedClusterApplierService.setInitialState(
             ClusterState.builder(new ClusterName("ClusterApplierServiceTests"))
@@ -233,8 +194,6 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
             });
             assertBusy(mockAppender::assertAllExpectationsMatched);
         }
-        verifyNoInteractions(applierslatencyHistogram);
-        verifyNoInteractions(listenerslatencyHistogram);
     }
 
     @TestLogging(value = "org.opensearch.cluster.service:WARN", reason = "to ensure that we log cluster state events on WARN level")
@@ -332,12 +291,10 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
             latch.await();
             mockAppender.assertAllExpectationsMatched();
         }
-        verifyNoInteractions(applierslatencyHistogram);
-        verifyNoInteractions(listenerslatencyHistogram);
     }
 
     public void testLocalNodeClusterManagerListenerCallbacks() {
-        TimedClusterApplierService timedClusterApplierService = createTimedClusterService(false, Optional.empty());
+        TimedClusterApplierService timedClusterApplierService = createTimedClusterService(false);
 
         AtomicBoolean isClusterManager = new AtomicBoolean();
         timedClusterApplierService.addLocalNodeClusterManagerListener(new LocalNodeClusterManagerListener() {
@@ -372,8 +329,6 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
         setState(timedClusterApplierService, state);
         assertThat(isClusterManager.get(), is(true));
 
-        verifyNoInteractions(applierslatencyHistogram, listenerslatencyHistogram);
-
         timedClusterApplierService.close();
     }
 
@@ -383,7 +338,7 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
      * To support inclusive language, LocalNodeMasterListener is deprecated in 2.2.
      */
     public void testDeprecatedLocalNodeMasterListenerCallbacks() {
-        TimedClusterApplierService timedClusterApplierService = createTimedClusterService(false, Optional.empty());
+        TimedClusterApplierService timedClusterApplierService = createTimedClusterService(false);
 
         AtomicBoolean isClusterManager = new AtomicBoolean();
         timedClusterApplierService.addLocalNodeMasterListener(new LocalNodeMasterListener() {
@@ -410,8 +365,6 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
         state = ClusterState.builder(state).nodes(nodesBuilder).build();
         setState(timedClusterApplierService, state);
         assertThat(isClusterManager.get(), is(false));
-
-        verifyNoInteractions(applierslatencyHistogram, listenerslatencyHistogram);
 
         timedClusterApplierService.close();
     }
@@ -452,10 +405,6 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
         latch.await();
         assertNull(error.get());
         assertTrue(applierCalled.get());
-
-        verify(applierslatencyHistogram, atLeastOnce()).record(anyDouble(), any());
-        clearInvocations(applierslatencyHistogram);
-        verifyNoInteractions(listenerslatencyHistogram);
     }
 
     public void testClusterStateApplierBubblesUpExceptionsInApplier() throws InterruptedException {
@@ -486,9 +435,6 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
         latch.await();
         assertNotNull(error.get());
         assertThat(error.get().getMessage(), containsString("dummy exception"));
-
-        verifyNoInteractions(applierslatencyHistogram);
-        verifyNoInteractions(listenerslatencyHistogram);
     }
 
     public void testClusterStateApplierBubblesUpExceptionsInSettingsApplier() throws InterruptedException {
@@ -532,9 +478,6 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
         latch.await();
         assertNotNull(error.get());
         assertThat(error.get().getMessage(), containsString("illegal value can't update"));
-
-        verifyNoInteractions(applierslatencyHistogram);
-        verifyNoInteractions(listenerslatencyHistogram);
     }
 
     public void testClusterStateApplierSwallowsExceptionInListener() throws InterruptedException {
@@ -566,9 +509,6 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
         latch.await();
         assertNull(error.get());
         assertTrue(applierCalled.get());
-
-        verifyNoInteractions(applierslatencyHistogram);
-        verifyNoInteractions(listenerslatencyHistogram);
     }
 
     public void testClusterStateApplierCanCreateAnObserver() throws InterruptedException {
@@ -625,10 +565,6 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
         latch.await();
         assertNull(error.get());
         assertTrue(applierCalled.get());
-
-        verify(applierslatencyHistogram, atLeastOnce()).record(anyDouble(), any());
-        clearInvocations(applierslatencyHistogram);
-        verifyNoInteractions(listenerslatencyHistogram);
     }
 
     public void testThreadContext() throws InterruptedException {
@@ -673,9 +609,6 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
         }
 
         latch.await();
-
-        verifyNoInteractions(applierslatencyHistogram);
-        verifyNoInteractions(listenerslatencyHistogram);
     }
 
     static class TimedClusterApplierService extends ClusterApplierService {
@@ -686,16 +619,6 @@ public class ClusterApplierServiceTests extends OpenSearchTestCase {
 
         TimedClusterApplierService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool) {
             super("test_node", settings, clusterSettings, threadPool);
-            this.clusterSettings = clusterSettings;
-        }
-
-        TimedClusterApplierService(
-            Settings settings,
-            ClusterSettings clusterSettings,
-            ThreadPool threadPool,
-            ClusterManagerMetrics clusterManagerMetrics
-        ) {
-            super("test_node", settings, clusterSettings, threadPool, clusterManagerMetrics);
             this.clusterSettings = clusterSettings;
         }
 

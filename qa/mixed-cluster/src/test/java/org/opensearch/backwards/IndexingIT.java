@@ -31,9 +31,11 @@
 
 package org.opensearch.backwards;
 
-import org.apache.hc.core5.http.HttpHost;
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.http.HttpHost;
+import org.apache.http.ParseException;
+
+
+import org.apache.http.util.EntityUtils;
 import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.client.Request;
@@ -53,7 +55,6 @@ import org.opensearch.test.rest.OpenSearchRestTestCase;
 import org.opensearch.test.rest.yaml.ObjectPath;
 
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -114,6 +115,8 @@ public class IndexingIT extends OpenSearchRestTestCase {
     /**
      * This test verifies that segment replication does not break when primary shards are on lower OS version. It does this
      * by verifying replica shards contains same number of documents as primary's.
+     *
+     * @throws Exception
      */
     public void testIndexingWithPrimaryOnBwcNodes() throws Exception {
         if (UPGRADE_FROM_VERSION.before(Version.V_2_4_0)) {
@@ -164,6 +167,8 @@ public class IndexingIT extends OpenSearchRestTestCase {
      * This test creates a cluster with primary on higher version but due to {@link org.opensearch.cluster.routing.allocation.decider.NodeVersionAllocationDecider};
      * replica shard allocation on lower OpenSearch version is prevented. Thus, this test though cover the use case where
      * primary shard containing nodes are running on higher OS version while replicas are unassigned.
+     *
+     * @throws Exception
      */
     public void testIndexingWithReplicaOnBwcNodes() throws Exception {
         if (UPGRADE_FROM_VERSION.before(Version.V_2_4_0)) {
@@ -530,7 +535,7 @@ public class IndexingIT extends OpenSearchRestTestCase {
         return shards;
     }
 
-    private Nodes buildNodeAndVersions() throws IOException, URISyntaxException {
+    private Nodes buildNodeAndVersions() throws IOException {
         Response response = client().performRequest(new Request("GET", "_nodes"));
         ObjectPath objectPath = ObjectPath.createFromResponse(response);
         Map<String, Object> nodesAsMap = objectPath.evaluate("nodes");
@@ -540,7 +545,7 @@ public class IndexingIT extends OpenSearchRestTestCase {
                 id,
                 objectPath.evaluate("nodes." + id + ".name"),
                 Version.fromString(objectPath.evaluate("nodes." + id + ".version")),
-                HttpHost.create((String)objectPath.evaluate("nodes." + id + ".http.publish_address"))));
+                HttpHost.create(objectPath.evaluate("nodes." + id + ".http.publish_address"))));
         }
         response = client().performRequest(new Request("GET", "_cluster/state"));
         nodes.setClusterManagerNodeId(ObjectPath.createFromResponse(response).evaluate("master_node"));

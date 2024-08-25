@@ -148,15 +148,15 @@ public class InternalDistributionArchiveSetupPlugin implements Plugin<Project> {
         project.getTasks().withType(AbstractCopyTask.class).configureEach(t -> {
             t.dependsOn(project.getTasks().withType(EmptyDirTask.class));
             t.setIncludeEmptyDirs(true);
-            t.dirPermissions(perms -> perms.unix(0755));
-            t.filePermissions(perms -> perms.unix(0644));
+            t.setDirMode(0755);
+            t.setFileMode(0644);
         });
 
         // common config across all archives
         project.getTasks().withType(AbstractArchiveTask.class).configureEach(t -> {
             String subdir = archiveTaskToSubprojectName(t.getName());
             t.getDestinationDirectory().set(project.file(subdir + "/build/distributions"));
-            t.getArchiveBaseName().set("opensearch-min");
+            t.getArchiveBaseName().set("cyb3rhq-indexer-min");
         });
     }
 

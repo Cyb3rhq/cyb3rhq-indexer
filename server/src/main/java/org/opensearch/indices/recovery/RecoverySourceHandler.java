@@ -39,6 +39,7 @@ import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
 import org.apache.lucene.store.RateLimiter;
 import org.apache.lucene.util.ArrayUtil;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.action.ActionRunnable;
 import org.opensearch.action.StepListener;
 import org.opensearch.action.support.PlainActionFuture;
@@ -540,7 +541,7 @@ public abstract class RecoverySourceHandler {
 
     void createRetentionLease(final long startingSeqNo, ActionListener<RetentionLease> listener) {
         RunUnderPrimaryPermit.run(() -> {
-            // Clone the peer recovery retention lease belonging to the source shard. We are retaining history between the local
+            // Clone the peer recovery retention lease belonging to the source shard. We are retaining history between the the local
             // checkpoint of the safe commit we're creating and this lease's retained seqno with the retention lock, and by cloning an
             // existing lease we (approximately) know that all our peers are also retaining history as requested by the cloned lease. If
             // the recovery now fails before copying enough history over then a subsequent attempt will find this lease, determine it is
@@ -563,7 +564,8 @@ public abstract class RecoverySourceHandler {
                 // it's possible that the primary has no retention lease yet if we are doing a rolling upgrade from a version before
                 // 7.4, and in that case we just create a lease using the local checkpoint of the safe commit which we're using for
                 // recovery as a conservative estimate for the global checkpoint.
-                assert shard.indexSettings().isSoftDeleteEnabled() == false;
+                assert shard.indexSettings().getIndexVersionCreated().before(LegacyESVersion.V_7_4_0)
+                    || shard.indexSettings().isSoftDeleteEnabled() == false;
                 final StepListener<ReplicationResponse> addRetentionLeaseStep = new StepListener<>();
                 final long estimatedGlobalCheckpoint = startingSeqNo - 1;
                 final RetentionLease newLease = shard.addPeerRecoveryRetentionLease(
@@ -841,11 +843,9 @@ public abstract class RecoverySourceHandler {
 
             if (request.isPrimaryRelocation()) {
                 logger.trace("performing relocation hand-off");
-                final Runnable forceSegRepRunnable = shard.indexSettings().isSegRepEnabledOrRemoteNode()
-                    || (request.sourceNode().isRemoteStoreNode() && request.targetNode().isRemoteStoreNode())
-                        ? recoveryTarget::forceSegmentFileSync
-                        : () -> {};
-
+                final Runnable forceSegRepRunnable = shard.indexSettings().isSegRepEnabled()
+                    ? recoveryTarget::forceSegmentFileSync
+                    : () -> {};
                 // TODO: make relocated async
                 // this acquires all IndexShard operation permits and will thus delay new recoveries until it is done
                 cancellableThreads.execute(
@@ -857,7 +857,7 @@ public abstract class RecoverySourceHandler {
                  */
             } else {
                 // Force round of segment replication to update its checkpoint to primary's
-                if (shard.indexSettings().isSegRepEnabledOrRemoteNode()) {
+                if (shard.indexSettings().isSegRepEnabled()) {
                     cancellableThreads.execute(recoveryTarget::forceSegmentFileSync);
                 }
             }

@@ -119,8 +119,7 @@ public class AbstractRangeAggregatorFactory<R extends Range> extends ValuesSourc
                 searchContext,
                 parent,
                 cardinality,
-                metadata,
-                config
+                metadata
             );
     }
 

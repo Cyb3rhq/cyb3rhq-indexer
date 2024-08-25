@@ -32,6 +32,7 @@
 
 package org.opensearch.search.aggregations.metrics;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.common.Nullable;
 import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.Strings;
@@ -162,8 +163,11 @@ public class TopHitsAggregationBuilder extends AbstractAggregationBuilder<TopHit
         trackScores = in.readBoolean();
         version = in.readBoolean();
         seqNoAndPrimaryTerm = in.readBoolean();
-        if (in.readBoolean()) {
-            fetchFields = in.readList(FieldAndFormat::new);
+
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            if (in.readBoolean()) {
+                fetchFields = in.readList(FieldAndFormat::new);
+            }
         }
     }
 
@@ -193,9 +197,12 @@ public class TopHitsAggregationBuilder extends AbstractAggregationBuilder<TopHit
         out.writeBoolean(trackScores);
         out.writeBoolean(version);
         out.writeBoolean(seqNoAndPrimaryTerm);
-        out.writeBoolean(fetchFields != null);
-        if (fetchFields != null) {
-            out.writeList(fetchFields);
+
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_10_0)) {
+            out.writeBoolean(fetchFields != null);
+            if (fetchFields != null) {
+                out.writeList(fetchFields);
+            }
         }
     }
 

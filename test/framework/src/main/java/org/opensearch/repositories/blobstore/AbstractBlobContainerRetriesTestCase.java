@@ -35,8 +35,8 @@ package org.opensearch.repositories.blobstore;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
-import org.apache.hc.core5.http.ConnectionClosedException;
-import org.apache.hc.core5.http.HttpStatus;
+import org.apache.http.ConnectionClosedException;
+import org.apache.http.HttpStatus;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.SuppressForbidden;
 import org.opensearch.common.blobstore.BlobContainer;

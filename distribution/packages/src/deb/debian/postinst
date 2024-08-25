@@ -1,0 +1,58 @@
+#!/bin/bash
+
+# Copyright Cyb3rhq Indexer Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The Cyb3rhq Indexer Contributors require contributions made to
+# this file be licensed under the Apache-2.0 license or a
+# compatible open source license.
+
+# deb cyb3rhq-indexer postinst script
+
+set -e
+
+echo "Running Cyb3rhq Indexer Post-Installation Script"
+
+product_dir=/usr/share/cyb3rhq-indexer
+config_dir=/etc/cyb3rhq-indexer
+data_dir=/var/lib/cyb3rhq-indexer
+log_dir=/var/log/cyb3rhq-indexer
+pid_dir=/run/cyb3rhq-indexer
+tmp_dir=/var/log/cyb3rhq-indexer/tmp
+
+
+# Create needed directories
+mkdir -p ${tmp_dir}
+
+# Set owner
+chown -R cyb3rhq-indexer:cyb3rhq-indexer ${product_dir}
+chown -R cyb3rhq-indexer:cyb3rhq-indexer ${config_dir}
+chown -R cyb3rhq-indexer:cyb3rhq-indexer ${log_dir}
+chown -R cyb3rhq-indexer:cyb3rhq-indexer ${data_dir}
+chown -R cyb3rhq-indexer:cyb3rhq-indexer ${pid_dir}
+chown -R cyb3rhq-indexer:cyb3rhq-indexer ${tmp_dir}
+
+# Reload systemctl daemon
+if command -v systemctl > /dev/null; then
+    systemctl daemon-reload
+fi
+
+# Reload other configs
+if command -v systemctl > /dev/null; then
+    systemctl restart systemd-sysctl.service || true
+fi
+
+if command -v systemd-tmpfiles > /dev/null; then
+    systemd-tmpfiles --create cyb3rhq-indexer.conf
+fi
+
+# Messages
+echo "### NOT starting on installation, please execute the following statements to configure cyb3rhq-indexer service to start automatically using systemd"
+echo " sudo systemctl daemon-reload"
+echo " sudo systemctl enable cyb3rhq-indexer.service"
+echo "### You can start cyb3rhq-indexer service by executing"
+echo " sudo systemctl start cyb3rhq-indexer.service"
+
+exit 0
+
+

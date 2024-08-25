@@ -337,7 +337,7 @@ public abstract class OpenSearchBlobStoreRepositoryIntegTestCase extends OpenSea
         List<String> deleteIndices = randomSubsetOf(randomIntBetween(0, indexCount), indexNames);
         if (deleteIndices.size() > 0) {
             logger.info("-->  delete indices {}", deleteIndices);
-            assertAcked(client().admin().indices().prepareDelete(deleteIndices.toArray(new String[0])));
+            assertAcked(client().admin().indices().prepareDelete(deleteIndices.toArray(new String[deleteIndices.size()])));
         }
 
         Set<String> closeIndices = new HashSet<>(Arrays.asList(indexNames));
@@ -363,7 +363,7 @@ public abstract class OpenSearchBlobStoreRepositoryIntegTestCase extends OpenSea
             // Wait for green so the close does not fail in the edge case of coinciding with a shard recovery that hasn't fully synced yet
             ensureGreen();
             logger.info("-->  close indices {}", closeIndices);
-            assertAcked(client().admin().indices().prepareClose(closeIndices.toArray(new String[0])));
+            assertAcked(client().admin().indices().prepareClose(closeIndices.toArray(new String[closeIndices.size()])));
         }
 
         logger.info("--> restore all indices from the snapshot");

@@ -32,22 +32,18 @@
 
 package org.opensearch.client;
 
-import org.apache.hc.client5.http.config.RequestConfig;
-import org.apache.hc.core5.http.Header;
-import org.apache.hc.core5.util.Timeout;
+import org.apache.http.Header;
+import org.apache.http.client.config.RequestConfig;
 import org.opensearch.client.HttpAsyncResponseConsumerFactory.HeapBufferedResponseConsumerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
@@ -93,39 +89,6 @@ public class RequestOptionsTests extends RestClientTestCase {
         }
     }
 
-    public void testAddParameter() {
-        assertThrows(
-            "query parameter name cannot be null",
-            NullPointerException.class,
-            () -> randomBuilder().addParameter(null, randomAsciiLettersOfLengthBetween(3, 10))
-        );
-
-        assertThrows(
-            "query parameter value cannot be null",
-            NullPointerException.class,
-            () -> randomBuilder().addParameter(randomAsciiLettersOfLengthBetween(3, 10), null)
-        );
-
-        RequestOptions.Builder builder = RequestOptions.DEFAULT.toBuilder();
-        int numParameters = between(0, 5);
-        Map<String, String> parameters = new HashMap<>();
-        for (int i = 0; i < numParameters; i++) {
-            String name = randomAsciiAlphanumOfLengthBetween(5, 10);
-            String value = randomAsciiAlphanumOfLength(3);
-            parameters.put(name, value);
-            builder.addParameter(name, value);
-        }
-        RequestOptions options = builder.build();
-        assertEquals(parameters, options.getParameters());
-
-        try {
-            options.getParameters().put(randomAsciiAlphanumOfLengthBetween(5, 10), randomAsciiAlphanumOfLength(3));
-            fail("expected failure");
-        } catch (UnsupportedOperationException e) {
-            assertNull(e.getMessage());
-        }
-    }
-
     public void testSetHttpAsyncResponseConsumerFactory() {
         try {
             RequestOptions.DEFAULT.toBuilder().setHttpAsyncResponseConsumerFactory(null);
@@ -145,15 +108,15 @@ public class RequestOptionsTests extends RestClientTestCase {
         RequestOptions.Builder builder = RequestOptions.DEFAULT.toBuilder();
 
         RequestConfig.Builder requestConfigBuilder = RequestConfig.custom();
-        Timeout responseTimeout = Timeout.ofMilliseconds(10000);
-        Timeout connectTimeout = Timeout.ofMilliseconds(100);
-        requestConfigBuilder.setResponseTimeout(responseTimeout).setConnectTimeout(connectTimeout);
+        int socketTimeout = 10000;
+        int connectTimeout = 100;
+        requestConfigBuilder.setSocketTimeout(socketTimeout).setConnectTimeout(connectTimeout);
         RequestConfig requestConfig = requestConfigBuilder.build();
 
         builder.setRequestConfig(requestConfig);
         RequestOptions options = builder.build();
         assertSame(options.getRequestConfig(), requestConfig);
-        assertEquals(options.getRequestConfig().getResponseTimeout(), responseTimeout);
+        assertEquals(options.getRequestConfig().getSocketTimeout(), socketTimeout);
         assertEquals(options.getRequestConfig().getConnectTimeout(), connectTimeout);
     }
 
@@ -178,13 +141,6 @@ public class RequestOptionsTests extends RestClientTestCase {
             int headerCount = between(1, 5);
             for (int i = 0; i < headerCount; i++) {
                 builder.addHeader(randomAsciiAlphanumOfLength(3), randomAsciiAlphanumOfLength(3));
-            }
-        }
-
-        if (randomBoolean()) {
-            int queryParamCount = between(1, 5);
-            for (int i = 0; i < queryParamCount; i++) {
-                builder.addParameter(randomAsciiAlphanumOfLength(3), randomAsciiAlphanumOfLength(3));
             }
         }
 

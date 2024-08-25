@@ -38,7 +38,6 @@ import java.util.Map;
 import java.util.function.Function;
 
 import static org.opensearch.index.query.QueryBuilders.scriptQuery;
-import static org.opensearch.search.SearchService.CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_SETTING;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
 
@@ -325,12 +324,6 @@ public class ConcurrentSearchStatsIT extends OpenSearchIntegTestCase {
             client().prepareIndex(INDEX).setId(Integer.toString(i)).setSource("field", "value" + i).get();
             refresh();
         }
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setTransientSettings(Settings.builder().put(CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_SETTING.getKey(), 10))
-            .execute()
-            .actionGet();
 
         client().prepareSearch(INDEX).execute().actionGet();
 
@@ -343,16 +336,9 @@ public class ConcurrentSearchStatsIT extends OpenSearchIntegTestCase {
 
         for (ThreadPoolStats.Stats stats : threadPoolStats) {
             if (stats.getName().equals(ThreadPool.Names.INDEX_SEARCHER)) {
-                assertThat(stats.getWaitTime().micros(), greaterThan(0L));
+                assertThat(stats.getWaitTime().nanos(), greaterThan(0L));
             }
         }
-
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setTransientSettings(Settings.builder().put(CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_SETTING.getKey(), 2))
-            .execute()
-            .actionGet();
     }
 
     public static class ScriptedDelayedPlugin extends MockScriptPlugin {

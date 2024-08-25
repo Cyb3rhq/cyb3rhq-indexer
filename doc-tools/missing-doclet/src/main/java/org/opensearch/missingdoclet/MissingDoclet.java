@@ -332,20 +332,13 @@ public class MissingDoclet extends StandardDoclet {
 
     // Ignore classes annotated with @Generated and all enclosed elements in them.
     private boolean isGenerated(Element element) {
-        final boolean isGenerated = element
+        return element
             .getAnnotationMirrors()
             .stream()
             .anyMatch(m -> m
                 .getAnnotationType()
                 .toString() /* ClassSymbol.toString() returns class name */
                 .equalsIgnoreCase("javax.annotation.Generated"));
-
-        if (!isGenerated && element.getEnclosingElement() != null) {
-            // check if enclosing element is generated
-            return isGenerated(element.getEnclosingElement());
-        } 
-
-        return isGenerated;
     }
 
     private boolean hasInheritedJavadocs(Element element) {

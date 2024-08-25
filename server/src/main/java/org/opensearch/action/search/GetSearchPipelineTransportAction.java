@@ -48,8 +48,7 @@ public class GetSearchPipelineTransportAction extends TransportClusterManagerNod
             threadPool,
             actionFilters,
             GetSearchPipelineRequest::new,
-            indexNameExpressionResolver,
-            true
+            indexNameExpressionResolver
         );
     }
 

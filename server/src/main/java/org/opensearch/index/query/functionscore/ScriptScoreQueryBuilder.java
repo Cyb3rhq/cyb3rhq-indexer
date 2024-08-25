@@ -34,6 +34,7 @@ package org.opensearch.index.query.functionscore;
 
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.Query;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchException;
 import org.opensearch.common.lucene.search.function.ScriptScoreQuery;
 import org.opensearch.core.ParseField;
@@ -124,14 +125,22 @@ public class ScriptScoreQueryBuilder extends AbstractQueryBuilder<ScriptScoreQue
     public ScriptScoreQueryBuilder(StreamInput in) throws IOException {
         super(in);
         query = in.readNamedWriteable(QueryBuilder.class);
-        script = new Script(in);
+        if (in.getVersion().onOrAfter(LegacyESVersion.V_7_5_0)) {
+            script = new Script(in);
+        } else {
+            script = in.readNamedWriteable(ScriptScoreFunctionBuilder.class).getScript();
+        }
         minScore = in.readOptionalFloat();
     }
 
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeNamedWriteable(query);
-        script.writeTo(out);
+        if (out.getVersion().onOrAfter(LegacyESVersion.V_7_5_0)) {
+            script.writeTo(out);
+        } else {
+            out.writeNamedWriteable(new ScriptScoreFunctionBuilder(script));
+        }
         out.writeOptionalFloat(minScore);
     }
 

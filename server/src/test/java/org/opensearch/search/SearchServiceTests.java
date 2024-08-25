@@ -37,7 +37,6 @@ import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.store.AlreadyClosedException;
-import org.opensearch.OpenSearchException;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.action.index.IndexResponse;
 import org.opensearch.action.search.ClearScrollRequest;
@@ -54,10 +53,8 @@ import org.opensearch.action.search.UpdatePitContextResponse;
 import org.opensearch.action.support.IndicesOptions;
 import org.opensearch.action.support.PlainActionFuture;
 import org.opensearch.action.support.WriteRequest;
-import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.UUIDs;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsException;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.Strings;
@@ -73,7 +70,6 @@ import org.opensearch.index.IndexNotFoundException;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.engine.Engine;
-import org.opensearch.index.mapper.DerivedFieldType;
 import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchNoneQueryBuilder;
@@ -547,131 +543,6 @@ public class SearchServiceTests extends OpenSearchSingleNodeTestCase {
                     + "This limit can be set by changing the [index.max_docvalue_fields_search] index level setting.",
                 ex.getMessage()
             );
-        }
-    }
-
-    public void testDerivedFieldsSearch() throws IOException {
-        createIndex("index");
-        final SearchService service = getInstanceFromNode(SearchService.class);
-        final IndicesService indicesService = getInstanceFromNode(IndicesService.class);
-        final IndexService indexService = indicesService.indexServiceSafe(resolveIndex("index"));
-        final IndexShard indexShard = indexService.getShard(0);
-
-        SearchRequest searchRequest = new SearchRequest().allowPartialSearchResults(true);
-        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-        searchRequest.source(searchSourceBuilder);
-
-        for (int i = 0; i < 5; i++) {
-            searchSourceBuilder.derivedField(
-                "field" + i,
-                "date",
-                new Script(ScriptType.INLINE, MockScriptEngine.NAME, CustomScriptPlugin.DUMMY_SCRIPT, Collections.emptyMap())
-            );
-        }
-        indexService.getIndexSettings().isDerivedFieldAllowed();
-        final ShardSearchRequest request = new ShardSearchRequest(
-            OriginalIndices.NONE,
-            searchRequest,
-            indexShard.shardId(),
-            1,
-            new AliasFilter(null, Strings.EMPTY_ARRAY),
-            1.0f,
-            -1,
-            null,
-            null
-        );
-
-        try (ReaderContext reader = createReaderContext(indexService, indexShard)) {
-            try (SearchContext context = service.createContext(reader, request, null, randomBoolean())) {
-                assertNotNull(context);
-                for (int i = 0; i < 5; i++) {
-                    DerivedFieldType derivedFieldType = (DerivedFieldType) context.getQueryShardContext()
-                        .resolveDerivedFieldType("field" + i);
-                    assertEquals("field" + i, derivedFieldType.name());
-                    assertEquals("date", derivedFieldType.getType());
-                }
-                assertNull(context.getQueryShardContext().resolveDerivedFieldType("field" + 5));
-            }
-        }
-    }
-
-    public void testDerivedFieldDisabled() throws IOException {
-        createIndex("index");
-        final SearchService service = getInstanceFromNode(SearchService.class);
-        final IndicesService indicesService = getInstanceFromNode(IndicesService.class);
-        final IndexService indexService = indicesService.indexServiceSafe(resolveIndex("index"));
-        final IndexShard indexShard = indexService.getShard(0);
-
-        SearchRequest searchRequest = new SearchRequest().allowPartialSearchResults(true);
-        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-        searchRequest.source(searchSourceBuilder);
-
-        searchSourceBuilder.derivedField(
-            "field",
-            "date",
-            new Script(ScriptType.INLINE, MockScriptEngine.NAME, CustomScriptPlugin.DUMMY_SCRIPT, Collections.emptyMap())
-        );
-        indexService.getIndexSettings().isDerivedFieldAllowed();
-        final ShardSearchRequest request = new ShardSearchRequest(
-            OriginalIndices.NONE,
-            searchRequest,
-            indexShard.shardId(),
-            1,
-            new AliasFilter(null, Strings.EMPTY_ARRAY),
-            1.0f,
-            -1,
-            null,
-            null
-        );
-
-        try (ReaderContext reader = createReaderContext(indexService, indexShard)) {
-            SearchContext context = service.createContext(reader, request, null, randomBoolean());
-
-            // nothing disabled, derived field resolved fine
-            assertNotNull(context.getQueryShardContext().resolveDerivedFieldType("field"));
-
-            // disabled using cluster setting, assert create context fails
-            client().admin()
-                .cluster()
-                .prepareUpdateSettings()
-                .setTransientSettings(Settings.builder().put(SearchService.CLUSTER_ALLOW_DERIVED_FIELD_SETTING.getKey(), false))
-                .get();
-            assertThrows(OpenSearchException.class, () -> service.createContext(reader, request, null, randomBoolean()));
-
-            // dynamically enabled using cluster setting, assert derived field resolved fine
-            client().admin()
-                .cluster()
-                .prepareUpdateSettings()
-                .setTransientSettings(Settings.builder().put(SearchService.CLUSTER_ALLOW_DERIVED_FIELD_SETTING.getKey(), true))
-                .get();
-            context = service.createContext(reader, request, null, randomBoolean());
-            assertNotNull(context.getQueryShardContext().resolveDerivedFieldType("field"));
-
-            // disabled using index setting, assert create context fails
-            client().admin()
-                .indices()
-                .prepareUpdateSettings("index")
-                .setSettings(Settings.builder().put(IndexSettings.ALLOW_DERIVED_FIELDS.getKey(), false))
-                .get();
-
-            assertThrows(OpenSearchException.class, () -> service.createContext(reader, request, null, randomBoolean()));
-
-            // dynamically enabled using index setting, assert derived field resolved fine
-            client().admin()
-                .indices()
-                .prepareUpdateSettings("index")
-                .setSettings(Settings.builder().put(IndexSettings.ALLOW_DERIVED_FIELDS.getKey(), true))
-                .get();
-
-            context = service.createContext(reader, request, null, randomBoolean());
-            assertNotNull(context.getQueryShardContext().resolveDerivedFieldType("field"));
-
-            // Cleanup
-            client().admin()
-                .cluster()
-                .prepareUpdateSettings()
-                .setTransientSettings(Settings.builder().putNull(SearchService.CLUSTER_ALLOW_DERIVED_FIELD_SETTING.getKey()))
-                .get();
         }
     }
 
@@ -1199,15 +1070,15 @@ public class SearchServiceTests extends OpenSearchSingleNodeTestCase {
             )
         ).actionGet();
 
-        SettingsException se = expectThrows(
-            SettingsException.class,
+        IllegalArgumentException iae = expectThrows(
+            IllegalArgumentException.class,
             () -> client().admin()
                 .indices()
                 .prepareUpdateSettings("throttled_threadpool_index")
                 .setSettings(Settings.builder().put(IndexSettings.INDEX_SEARCH_THROTTLED.getKey(), false))
                 .get()
         );
-        assertEquals("can not update private setting [index.search.throttled]; this setting is managed by OpenSearch", se.getMessage());
+        assertEquals("can not update private setting [index.search.throttled]; this setting is managed by OpenSearch", iae.getMessage());
         assertFalse(service.getIndicesService().indexServiceSafe(index).getIndexSettings().isSearchThrottled());
         SearchRequest searchRequest = new SearchRequest().allowPartialSearchResults(false);
         ShardSearchRequest req = new ShardSearchRequest(
@@ -1411,106 +1282,6 @@ public class SearchServiceTests extends OpenSearchSingleNodeTestCase {
             .cluster()
             .prepareUpdateSettings()
             .setTransientSettings(Settings.builder().putNull(SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey()))
-            .get();
-    }
-
-    /**
-     * Tests that the slice count is calculated correctly when concurrent search is enabled
-     *  If concurrent search enabled -
-     *       pick index level slice count setting if index level setting is set
-     *       else pick default cluster level slice count setting
-     * @throws IOException
-     */
-    public void testConcurrentSegmentSearchSliceCount() throws IOException {
-
-        String index = randomAlphaOfLengthBetween(5, 10).toLowerCase(Locale.ROOT);
-        IndexService indexService = createIndex(index);
-        final SearchService service = getInstanceFromNode(SearchService.class);
-        ClusterService clusterService = getInstanceFromNode(ClusterService.class);
-        ShardId shardId = new ShardId(indexService.index(), 0);
-        long nowInMillis = System.currentTimeMillis();
-        String clusterAlias = randomBoolean() ? null : randomAlphaOfLengthBetween(3, 10);
-        SearchRequest searchRequest = new SearchRequest();
-        searchRequest.allowPartialSearchResults(randomBoolean());
-        ShardSearchRequest request = new ShardSearchRequest(
-            OriginalIndices.NONE,
-            searchRequest,
-            shardId,
-            indexService.numberOfShards(),
-            AliasFilter.EMPTY,
-            1f,
-            nowInMillis,
-            clusterAlias,
-            Strings.EMPTY_ARRAY
-        );
-        // enable concurrent search
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setTransientSettings(Settings.builder().put(SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true))
-            .get();
-
-        Integer[][] scenarios = {
-            // cluster setting, index setting, expected slice count
-            // expected value null will pick up default value from settings
-            { null, null, clusterService.getClusterSettings().get(SearchService.CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_SETTING) },
-            { 4, null, 4 },
-            { null, 3, 3 },
-            { 4, 3, 3 }, };
-
-        for (Integer[] sliceCounts : scenarios) {
-            Integer clusterSliceCount = sliceCounts[0];
-            Integer indexSliceCount = sliceCounts[1];
-            Integer targetSliceCount = sliceCounts[2];
-
-            if (clusterSliceCount != null) {
-                client().admin()
-                    .cluster()
-                    .prepareUpdateSettings()
-                    .setTransientSettings(
-                        Settings.builder()
-                            .put(SearchService.CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_SETTING.getKey(), clusterSliceCount)
-                    )
-                    .get();
-            } else {
-                client().admin()
-                    .cluster()
-                    .prepareUpdateSettings()
-                    .setTransientSettings(
-                        Settings.builder().putNull(SearchService.CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_SETTING.getKey())
-                    )
-                    .get();
-            }
-            if (indexSliceCount != null) {
-                client().admin()
-                    .indices()
-                    .prepareUpdateSettings(index)
-                    .setSettings(
-                        Settings.builder().put(IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_MAX_SLICE_COUNT.getKey(), indexSliceCount)
-                    )
-                    .get();
-            } else {
-                client().admin()
-                    .indices()
-                    .prepareUpdateSettings(index)
-                    .setSettings(Settings.builder().putNull(IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_MAX_SLICE_COUNT.getKey()))
-                    .get();
-            }
-
-            try (DefaultSearchContext searchContext = service.createSearchContext(request, new TimeValue(System.currentTimeMillis()))) {
-                searchContext.evaluateRequestShouldUseConcurrentSearch();
-                assertEquals(targetSliceCount.intValue(), searchContext.getTargetMaxSliceCount());
-            }
-        }
-        // cleanup
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setTransientSettings(
-                Settings.builder()
-                    .putNull(SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey())
-                    .putNull(SearchService.CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_SETTING.getKey())
-            )
             .get();
     }
 

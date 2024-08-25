@@ -30,7 +30,7 @@ public class DelimitedTermFrequencyTokenFilterFactoryTests extends OpenSearchTok
                 .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
                 .put("index.analysis.filter.my_delimited_term_freq.type", "delimited_term_freq")
                 .build(),
-            new CommonAnalysisModulePlugin()
+            new CommonAnalysisPlugin()
         );
         doTest(analysis, "cat|4 dog|5");
     }
@@ -42,7 +42,7 @@ public class DelimitedTermFrequencyTokenFilterFactoryTests extends OpenSearchTok
                 .put("index.analysis.filter.my_delimited_term_freq.type", "delimited_term_freq")
                 .put("index.analysis.filter.my_delimited_term_freq.delimiter", ":")
                 .build(),
-            new CommonAnalysisModulePlugin()
+            new CommonAnalysisPlugin()
         );
         doTest(analysis, "cat:4 dog:5");
     }
@@ -56,7 +56,7 @@ public class DelimitedTermFrequencyTokenFilterFactoryTests extends OpenSearchTok
                     .put("index.analysis.filter.my_delimited_term_freq.type", "delimited_term_freq")
                     .put("index.analysis.filter.my_delimited_term_freq.delimiter", "^^")
                     .build(),
-                new CommonAnalysisModulePlugin()
+                new CommonAnalysisPlugin()
             )
         );
 

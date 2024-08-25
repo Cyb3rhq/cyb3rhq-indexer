@@ -47,7 +47,7 @@ import static org.opensearch.test.StreamsUtils.copyToBytesFromClasspath;
 public class BWCTemplateTests extends OpenSearchSingleNodeTestCase {
     @Override
     protected Collection<Class<? extends Plugin>> getPlugins() {
-        return pluginList(MapperExtrasModulePlugin.class);
+        return pluginList(MapperExtrasPlugin.class);
     }
 
     public void testBeatsTemplatesBWC() throws Exception {

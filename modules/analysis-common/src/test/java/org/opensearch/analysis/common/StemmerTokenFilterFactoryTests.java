@@ -56,7 +56,7 @@ import static com.carrotsearch.randomizedtesting.RandomizedTest.scaledRandomIntB
 
 public class StemmerTokenFilterFactoryTests extends OpenSearchTokenStreamTestCase {
 
-    private static final CommonAnalysisModulePlugin PLUGIN = new CommonAnalysisModulePlugin();
+    private static final CommonAnalysisPlugin PLUGIN = new CommonAnalysisPlugin();
 
     public void testEnglishFilterFactory() throws IOException {
         int iters = scaledRandomIntBetween(20, 100);

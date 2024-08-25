@@ -183,5 +183,4 @@ public class TestGatewayAllocator extends GatewayAllocator {
     public void addReplicationCheckpoint(ShardId shardId, String nodeName, ReplicationCheckpoint replicationCheckpoint) {
         shardIdNodeToReplicationCheckPointMap.putIfAbsent(getReplicationCheckPointKey(shardId, nodeName), replicationCheckpoint);
     }
-
 }

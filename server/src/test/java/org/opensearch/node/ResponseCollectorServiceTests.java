@@ -41,7 +41,6 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
@@ -64,7 +63,7 @@ public class ResponseCollectorServiceTests extends OpenSearchTestCase {
     public void setUp() throws Exception {
         super.setUp();
         threadpool = new TestThreadPool("response_collector_tests");
-        clusterService = ClusterServiceUtils.createClusterService(
+        clusterService = new ClusterService(
             Settings.EMPTY,
             new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
             threadpool

@@ -47,7 +47,7 @@ import java.util.function.Consumer;
 /**
  * A listener for action responses or failures.
  *
- * @opensearch.api
+ * @opensearch.internal
  */
 @PublicApi(since = "1.0.0")
 public interface ActionListener<Response> {

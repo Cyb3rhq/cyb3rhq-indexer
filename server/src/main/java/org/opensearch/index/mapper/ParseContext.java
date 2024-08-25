@@ -147,7 +147,7 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
                     f.add(field);
                 }
             }
-            return f.toArray(new IndexableField[0]);
+            return f.toArray(new IndexableField[f.size()]);
         }
 
         public IndexableField getField(String name) {

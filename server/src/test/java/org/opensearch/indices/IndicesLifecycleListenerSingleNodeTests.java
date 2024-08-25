@@ -34,7 +34,6 @@ package org.opensearch.indices;
 import org.opensearch.Version;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.cluster.routing.RecoverySource;
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.cluster.routing.ShardRoutingHelper;
@@ -150,6 +149,15 @@ public class IndicesLifecycleListenerSingleNodeTests extends OpenSearchSingleNod
             newRouting = newRouting.moveToUnassigned(unassignedInfo)
                 .updateUnassigned(unassignedInfo, RecoverySource.EmptyStoreRecoverySource.INSTANCE);
             newRouting = ShardRoutingHelper.initialize(newRouting, nodeId);
+            IndexShard shard = index.createShard(
+                newRouting,
+                s -> {},
+                RetentionLeaseSyncer.EMPTY,
+                SegmentReplicationCheckpointPublisher.EMPTY,
+                null
+            );
+            IndexShardTestCase.updateRoutingEntry(shard, newRouting);
+            assertEquals(5, counter.get());
             final DiscoveryNode localNode = new DiscoveryNode(
                 "foo",
                 buildNewFakeTransportAddress(),
@@ -157,20 +165,6 @@ public class IndicesLifecycleListenerSingleNodeTests extends OpenSearchSingleNod
                 emptySet(),
                 Version.CURRENT
             );
-            IndexShard shard = index.createShard(
-                newRouting,
-                s -> {},
-                RetentionLeaseSyncer.EMPTY,
-                SegmentReplicationCheckpointPublisher.EMPTY,
-                null,
-                null,
-                localNode,
-                null,
-                DiscoveryNodes.builder().add(localNode).build()
-            );
-            IndexShardTestCase.updateRoutingEntry(shard, newRouting);
-            assertEquals(5, counter.get());
-
             shard.markAsRecovering("store", new RecoveryState(newRouting, localNode, null));
             IndexShardTestCase.recoverFromStore(shard);
             newRouting = ShardRoutingHelper.moveToStarted(newRouting);

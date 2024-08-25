@@ -37,7 +37,7 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.IndexModule;
-import org.opensearch.join.ParentJoinModulePlugin;
+import org.opensearch.join.ParentJoinPlugin;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.test.InternalSettingsPlugin;
 import org.opensearch.test.OpenSearchIntegTestCase;
@@ -64,7 +64,7 @@ public abstract class ParentChildTestCase extends ParameterizedStaticSettingsOpe
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(InternalSettingsPlugin.class, ParentJoinModulePlugin.class);
+        return Arrays.asList(InternalSettingsPlugin.class, ParentJoinPlugin.class);
     }
 
     @Override

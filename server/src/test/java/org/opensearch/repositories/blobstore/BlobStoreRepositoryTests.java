@@ -255,28 +255,6 @@ public class BlobStoreRepositoryTests extends BlobStoreRepositoryHelperTests {
         );
     }
 
-    public void testPrefixModeVerification() throws Exception {
-        final Client client = client();
-        final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());
-        final String repositoryName = "test-repo";
-        AcknowledgedResponse putRepositoryResponse = client.admin()
-            .cluster()
-            .preparePutRepository(repositoryName)
-            .setType(REPO_TYPE)
-            .setSettings(
-                Settings.builder()
-                    .put(node().settings())
-                    .put("location", location)
-                    .put(BlobStoreRepository.PREFIX_MODE_VERIFICATION_SETTING.getKey(), true)
-            )
-            .get();
-        assertTrue(putRepositoryResponse.isAcknowledged());
-
-        final RepositoriesService repositoriesService = getInstanceFromNode(RepositoriesService.class);
-        final BlobStoreRepository repository = (BlobStoreRepository) repositoriesService.repository(repositoryName);
-        assertTrue(repository.getPrefixModeVerification());
-    }
-
     public void testFsRepositoryCompressDeprecatedIgnored() {
         final Path location = OpenSearchIntegTestCase.randomRepoPath(node().settings());
         final Settings settings = Settings.builder().put(node().settings()).put("location", location).build();
@@ -286,7 +264,7 @@ public class BlobStoreRepositoryTests extends BlobStoreRepositoryHelperTests {
             .put(node().getEnvironment().settings())
             .put(FsRepository.REPOSITORIES_COMPRESS_SETTING.getKey(), true)
             .build();
-        Environment useCompressEnvironment = new Environment(useCompressSettings, node().getEnvironment().configDir());
+        Environment useCompressEnvironment = new Environment(useCompressSettings, node().getEnvironment().configFile());
 
         new FsRepository(metadata, useCompressEnvironment, null, BlobStoreTestUtil.mockClusterService(), null);
 

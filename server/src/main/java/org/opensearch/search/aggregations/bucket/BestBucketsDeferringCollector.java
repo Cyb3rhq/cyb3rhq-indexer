@@ -124,7 +124,6 @@ public class BestBucketsDeferringCollector extends DeferringBucketCollector {
         if (context != null) {
             assert docDeltasBuilder != null && bucketsBuilder != null;
             entries.add(new Entry(context, docDeltasBuilder.build(), bucketsBuilder.build()));
-            context = null;
         }
     }
 
@@ -162,7 +161,6 @@ public class BestBucketsDeferringCollector extends DeferringBucketCollector {
 
     @Override
     public void postCollection() throws IOException {
-        assert searchContext.searcher().getLeafContexts().isEmpty() || finished != true;
         finishLeaf();
         finished = true;
     }

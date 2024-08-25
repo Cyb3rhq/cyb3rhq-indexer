@@ -45,6 +45,7 @@ import org.opensearch.OpenSearchParseException;
 import org.opensearch.Version;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.geo.ShapeRelation;
+import org.opensearch.common.joda.Joda;
 import org.opensearch.common.logging.DeprecationLogger;
 import org.opensearch.common.lucene.BytesRefs;
 import org.opensearch.common.time.DateFormatter;
@@ -281,11 +282,15 @@ public final class DateFieldMapper extends ParametrizedFieldMapper {
 
         private DateFormatter buildFormatter() {
             try {
+                if (Joda.isJodaPattern(indexCreatedVersion, format.getValue())) {
+                    return Joda.forPattern(format.getValue()).withLocale(locale.getValue());
+                }
                 if (format.isConfigured() && !printFormat.isConfigured()) {
                     return DateFormatter.forPattern(format.getValue(), null, !format.isConfigured()).withLocale(locale.getValue());
                 }
                 return DateFormatter.forPattern(format.getValue(), printFormat.getValue(), !format.isConfigured())
                     .withLocale(locale.getValue());
+
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("Error parsing [format] on field [" + name() + "]: " + e.getMessage(), e);
             }
@@ -348,7 +353,7 @@ public final class DateFieldMapper extends ParametrizedFieldMapper {
      *
      * @opensearch.internal
      */
-    public static final class DateFieldType extends MappedFieldType implements NumericPointEncoder {
+    public static final class DateFieldType extends MappedFieldType {
         protected final DateFormatter dateTimeFormatter;
         protected final DateMathParser dateMathParser;
         protected final Resolution resolution;
@@ -457,30 +462,22 @@ public final class DateFieldMapper extends ParametrizedFieldMapper {
             @Nullable DateMathParser forcedDateParser,
             QueryShardContext context
         ) {
-            failIfNotIndexedAndNoDocValues();
+            failIfNotIndexed();
             if (relation == ShapeRelation.DISJOINT) {
                 throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] does not support DISJOINT ranges");
             }
             DateMathParser parser = forcedDateParser == null ? dateMathParser : forcedDateParser;
             return dateRangeQuery(lowerTerm, upperTerm, includeLower, includeUpper, timeZone, parser, context, resolution, (l, u) -> {
-                if (isSearchable() && hasDocValues()) {
-                    Query query = LongPoint.newRangeQuery(name(), l, u);
+                Query query = LongPoint.newRangeQuery(name(), l, u);
+                if (hasDocValues()) {
                     Query dvQuery = SortedNumericDocValuesField.newSlowRangeQuery(name(), l, u);
                     query = new IndexOrDocValuesQuery(query, dvQuery);
 
                     if (context.indexSortedOnField(name())) {
                         query = new IndexSortSortedNumericDocValuesRangeQuery(name(), l, u, query);
                     }
-                    return query;
                 }
-                if (hasDocValues()) {
-                    Query query = SortedNumericDocValuesField.newSlowRangeQuery(name(), l, u);
-                    if (context.indexSortedOnField(name())) {
-                        query = new IndexSortSortedNumericDocValuesRangeQuery(name(), l, u, query);
-                    }
-                    return query;
-                }
-                return LongPoint.newRangeQuery(name(), l, u);
+                return query;
             });
         }
 
@@ -550,15 +547,7 @@ public final class DateFieldMapper extends ParametrizedFieldMapper {
         }
 
         @Override
-        public byte[] encodePoint(Number value) {
-            byte[] point = new byte[Long.BYTES];
-            LongPoint.encodeDimension(value.longValue(), point, 0);
-            return point;
-        }
-
-        @Override
         public Query distanceFeatureQuery(Object origin, String pivot, float boost, QueryShardContext context) {
-            failIfNotIndexedAndNoDocValues();
             long originLong = parseToLong(origin, true, null, null, context::nowInMillis);
             TimeValue pivotTime = TimeValue.parseTimeValue(pivot, "distance_feature.pivot");
             return resolution.distanceFeatureQuery(name(), boost, originLong, pivotTime);
@@ -575,10 +564,6 @@ public final class DateFieldMapper extends ParametrizedFieldMapper {
             DateMathParser dateParser,
             QueryRewriteContext context
         ) throws IOException {
-            // if we have only doc_values enabled we do not look at the BKD so we return an INTERSECTS by default
-            if (isSearchable() == false && hasDocValues()) {
-                return Relation.INTERSECTS;
-            }
             if (dateParser == null) {
                 dateParser = this.dateMathParser;
             }

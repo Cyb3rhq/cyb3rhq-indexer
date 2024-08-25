@@ -35,7 +35,7 @@ import org.opensearch.common.network.NetworkModule;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.transport.Netty4ModulePlugin;
+import org.opensearch.transport.Netty4Plugin;
 import org.opensearch.transport.reactor.ReactorNetty4Plugin;
 import org.opensearch.transport.reactor.netty4.ReactorNetty4Transport;
 
@@ -61,13 +61,13 @@ public abstract class OpenSearchReactorNetty4IntegTestCase extends OpenSearchInt
         if (randomBoolean()) {
             builder.put(ReactorNetty4Transport.SETTING_WORKER_COUNT.getKey(), random().nextInt(3) + 1);
         }
-        builder.put(NetworkModule.TRANSPORT_TYPE_KEY, Netty4ModulePlugin.NETTY_TRANSPORT_NAME);
+        builder.put(NetworkModule.TRANSPORT_TYPE_KEY, Netty4Plugin.NETTY_TRANSPORT_NAME);
         builder.put(NetworkModule.HTTP_TYPE_KEY, ReactorNetty4Plugin.REACTOR_NETTY_HTTP_TRANSPORT_NAME);
         return builder.build();
     }
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(ReactorNetty4Plugin.class, Netty4ModulePlugin.class);
+        return List.of(ReactorNetty4Plugin.class, Netty4Plugin.class);
     }
 }

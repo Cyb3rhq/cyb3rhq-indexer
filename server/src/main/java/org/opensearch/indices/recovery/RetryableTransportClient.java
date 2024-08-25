@@ -10,6 +10,7 @@ package org.opensearch.indices.recovery;
 
 import org.apache.logging.log4j.Logger;
 import org.opensearch.ExceptionsHelper;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.action.ActionListenerResponseHandler;
 import org.opensearch.action.support.RetryableAction;
 import org.opensearch.cluster.node.DiscoveryNode;
@@ -98,7 +99,7 @@ public final class RetryableTransportClient {
 
             @Override
             public boolean shouldRetry(Exception e) {
-                return retryableException(e);
+                return targetNode.getVersion().onOrAfter(LegacyESVersion.V_7_9_0) && retryableException(e);
             }
         };
         onGoingRetryableActions.put(key, retryableAction);

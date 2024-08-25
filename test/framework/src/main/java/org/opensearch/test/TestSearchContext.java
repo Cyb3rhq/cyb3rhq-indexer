@@ -140,6 +140,8 @@ public class TestSearchContext extends SearchContext {
 
     private final Map<String, SearchExtBuilder> searchExtBuilders = new HashMap<>();
 
+    private ShardSearchRequest request;
+
     public TestSearchContext(BigArrays bigArrays, IndexService indexService) {
         this.bigArrays = bigArrays.withCircuitBreaking();
         this.indexService = indexService;
@@ -201,7 +203,11 @@ public class TestSearchContext extends SearchContext {
 
     @Override
     public ShardSearchRequest request() {
-        return null;
+        return request;
+    }
+
+    public void setShardSearchRequest(ShardSearchRequest request) {
+        this.request = request;
     }
 
     @Override
@@ -699,18 +705,18 @@ public class TestSearchContext extends SearchContext {
     }
 
     @Override
-    public int getTargetMaxSliceCount() {
-        assert concurrentSegmentSearchEnabled == true : "Please use concurrent search before fetching maxSliceCount";
-        return maxSliceCount;
-    }
-
-    @Override
     public boolean shouldUseTimeSeriesDescSortOptimization() {
         return indexShard != null
             && indexShard.isTimeSeriesDescSortOptimizationEnabled()
             && sort != null
             && sort.isSortOnTimeSeriesField()
             && sort.sort.getSort()[0].getReverse() == false;
+    }
+
+    @Override
+    public int getTargetMaxSliceCount() {
+        assert concurrentSegmentSearchEnabled == true : "Please use concurrent search before fetching maxSliceCount";
+        return maxSliceCount;
     }
 
     /**

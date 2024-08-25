@@ -65,10 +65,10 @@ public class MinHashTokenFilterFactory extends AbstractTokenFilterFactory {
         if (settings.hasValue("hash_count")) {
             settingMap.put("hashCount", settings.get("hash_count"));
         }
-        if (settings.hasValue("bucket_count")) {
+        if (settings.hasValue("bucketCount")) {
             settingMap.put("bucketCount", settings.get("bucket_count"));
         }
-        if (settings.hasValue("hash_set_size")) {
+        if (settings.hasValue("hashSetSize")) {
             settingMap.put("hashSetSize", settings.get("hash_set_size"));
         }
         if (settings.hasValue("with_rotation")) {

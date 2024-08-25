@@ -58,6 +58,7 @@ import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.repositories.blobstore.BlobStoreRepository;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.test.VersionUtils;
+import org.opensearch.transport.TransportService;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -72,21 +73,19 @@ import static org.opensearch.common.util.FeatureFlags.REMOTE_STORE_MIGRATION_EXP
 import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY;
 import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_REPOSITORY_SETTINGS_ATTRIBUTE_KEY_PREFIX;
 import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_REPOSITORY_TYPE_ATTRIBUTE_KEY_FORMAT;
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY;
 import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY;
 import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_TRANSLOG_REPOSITORY_NAME_ATTRIBUTE_KEY;
 import static org.opensearch.node.remotestore.RemoteStoreNodeService.MIGRATION_DIRECTION_SETTING;
 import static org.opensearch.node.remotestore.RemoteStoreNodeService.REMOTE_STORE_COMPATIBILITY_MODE_SETTING;
-import static org.opensearch.test.VersionUtils.allOpenSearchVersions;
-import static org.opensearch.test.VersionUtils.allVersions;
 import static org.opensearch.test.VersionUtils.maxCompatibleVersion;
 import static org.opensearch.test.VersionUtils.randomCompatibleVersion;
-import static org.opensearch.test.VersionUtils.randomOpenSearchVersion;
+import static org.opensearch.test.VersionUtils.randomVersion;
 import static org.opensearch.test.VersionUtils.randomVersionBetween;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -125,7 +124,7 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
 
     public void testPreventJoinClusterWithUnsupportedNodeVersions() {
         DiscoveryNodes.Builder builder = DiscoveryNodes.builder();
-        final Version version = randomOpenSearchVersion(random());
+        final Version version = randomVersion(random());
         builder.add(new DiscoveryNode(UUIDs.base64UUID(), buildNewFakeTransportAddress(), version));
         builder.add(new DiscoveryNode(UUIDs.base64UUID(), buildNewFakeTransportAddress(), randomCompatibleVersion(random(), version)));
         DiscoveryNodes nodes = builder.build();
@@ -134,32 +133,29 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
 
         final Version maxNodeVersion = nodes.getMaxNodeVersion();
         final Version minNodeVersion = nodes.getMinNodeVersion();
-        final DiscoveryNode tooLowJoiningNode = new DiscoveryNode(
-            UUIDs.base64UUID(),
-            buildNewFakeTransportAddress(),
-            LegacyESVersion.fromString("6.7.0")
-        );
-        expectThrows(IllegalStateException.class, () -> {
-            if (randomBoolean()) {
-                JoinTaskExecutor.ensureNodesCompatibility(tooLowJoiningNode, nodes, metadata);
-            } else {
-                JoinTaskExecutor.ensureNodesCompatibility(tooLowJoiningNode, nodes, metadata, minNodeVersion, maxNodeVersion);
-            }
-        });
+        if (maxNodeVersion.onOrAfter(LegacyESVersion.V_7_0_0)) {
+            final DiscoveryNode tooLowJoiningNode = new DiscoveryNode(
+                UUIDs.base64UUID(),
+                buildNewFakeTransportAddress(),
+                LegacyESVersion.fromString("6.7.0")
+            );
+            expectThrows(IllegalStateException.class, () -> {
+                if (randomBoolean()) {
+                    JoinTaskExecutor.ensureNodesCompatibility(tooLowJoiningNode, nodes, metadata);
+                } else {
+                    JoinTaskExecutor.ensureNodesCompatibility(tooLowJoiningNode, nodes, metadata, minNodeVersion, maxNodeVersion);
+                }
+            });
+        }
 
-        if (minNodeVersion.before(Version.V_3_0_0)) {
+        if (minNodeVersion.onOrAfter(LegacyESVersion.V_7_0_0)) {
             Version oldMajor = minNodeVersion.minimumCompatibilityVersion();
             expectThrows(IllegalStateException.class, () -> JoinTaskExecutor.ensureMajorVersionBarrier(oldMajor, minNodeVersion));
         }
 
-        final Version minGoodVersion;
-        if (maxNodeVersion.compareMajor(minNodeVersion) == 0) {
-            // we have to stick with the same major
-            minGoodVersion = minNodeVersion;
-        } else {
-            Version minCompatVersion = maxNodeVersion.minimumCompatibilityVersion();
-            minGoodVersion = minCompatVersion.before(allVersions().get(0)) ? allVersions().get(0) : minCompatVersion;
-        }
+        final Version minGoodVersion = maxNodeVersion.compareMajor(minNodeVersion) == 0 ?
+        // we have to stick with the same major
+            minNodeVersion : maxNodeVersion.minimumCompatibilityVersion();
         final Version justGood = randomVersionBetween(random(), minGoodVersion, maxCompatibleVersion(minNodeVersion));
         final DiscoveryNode justGoodJoiningNode = new DiscoveryNode(UUIDs.base64UUID(), buildNewFakeTransportAddress(), justGood);
         if (randomBoolean()) {
@@ -209,6 +205,7 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
             allocationService,
             logger,
             rerouteService,
+            null,
             remoteStoreNodeService
         );
 
@@ -245,6 +242,84 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
         assertTrue(taskResult.isSuccess());
 
         assertThat(result.resultingState.getNodes().get(actualNode.getId()).getRoles(), equalTo(actualNode.getRoles()));
+    }
+
+    public void testUpdatesNodeWithOpenSearchVersionForExistingAndNewNodes() throws Exception {
+        // During the upgrade from Elasticsearch, OpenSearch node send their version as 7.10.2 to Elasticsearch master
+        // in order to successfully join the cluster. But as soon as OpenSearch node becomes the master, cluster state
+        // should show the OpenSearch nodes version as 1.x. As the cluster state was carry forwarded from ES master,
+        // version in DiscoveryNode is stale 7.10.2.
+        final AllocationService allocationService = mock(AllocationService.class);
+        when(allocationService.adaptAutoExpandReplicas(any())).then(invocationOnMock -> invocationOnMock.getArguments()[0]);
+        when(allocationService.disassociateDeadNodes(any(), anyBoolean(), any())).then(
+            invocationOnMock -> invocationOnMock.getArguments()[0]
+        );
+        final RerouteService rerouteService = (reason, priority, listener) -> listener.onResponse(null);
+        Map<String, Version> channelVersions = new HashMap<>();
+        String node_1 = UUIDs.base64UUID();  // OpenSearch node running BWC version
+        String node_2 = UUIDs.base64UUID();  // OpenSearch node running BWC version
+        String node_3 = UUIDs.base64UUID();  // OpenSearch node running BWC version, sending new join request and no active channel
+        String node_4 = UUIDs.base64UUID();  // ES node 7.10.2
+        String node_5 = UUIDs.base64UUID();  // ES node 7.10.2 in cluster but missing channel version
+        String node_6 = UUIDs.base64UUID();  // ES node 7.9.0
+        String node_7 = UUIDs.base64UUID();  // ES node 7.9.0 in cluster but missing channel version
+        channelVersions.put(node_1, Version.CURRENT);
+        channelVersions.put(node_2, Version.CURRENT);
+        channelVersions.put(node_4, LegacyESVersion.V_7_10_2);
+        channelVersions.put(node_6, LegacyESVersion.V_7_10_0);
+
+        final TransportService transportService = mock(TransportService.class);
+        final RemoteStoreNodeService remoteStoreNodeService = mock(RemoteStoreNodeService.class);
+        when(transportService.getChannelVersion(any())).thenReturn(channelVersions);
+        DiscoveryNodes.Builder nodes = new DiscoveryNodes.Builder().localNodeId(node_1);
+        nodes.add(new DiscoveryNode(node_1, buildNewFakeTransportAddress(), LegacyESVersion.V_7_10_2));
+        nodes.add(new DiscoveryNode(node_2, buildNewFakeTransportAddress(), LegacyESVersion.V_7_10_2));
+        nodes.add(new DiscoveryNode(node_3, buildNewFakeTransportAddress(), LegacyESVersion.V_7_10_2));
+        nodes.add(new DiscoveryNode(node_4, buildNewFakeTransportAddress(), LegacyESVersion.V_7_10_2));
+        nodes.add(new DiscoveryNode(node_5, buildNewFakeTransportAddress(), LegacyESVersion.V_7_10_2));
+        nodes.add(new DiscoveryNode(node_6, buildNewFakeTransportAddress(), LegacyESVersion.V_7_10_1));
+        nodes.add(new DiscoveryNode(node_7, buildNewFakeTransportAddress(), LegacyESVersion.V_7_10_0));
+        final ClusterState clusterState = ClusterState.builder(ClusterName.DEFAULT).nodes(nodes).build();
+        final JoinTaskExecutor joinTaskExecutor = new JoinTaskExecutor(
+            Settings.EMPTY,
+            allocationService,
+            logger,
+            rerouteService,
+            transportService,
+            remoteStoreNodeService
+        );
+        final DiscoveryNode existing_node_3 = clusterState.nodes().get(node_3);
+        final DiscoveryNode node_3_new_join = new DiscoveryNode(
+            existing_node_3.getName(),
+            existing_node_3.getId(),
+            existing_node_3.getEphemeralId(),
+            existing_node_3.getHostName(),
+            existing_node_3.getHostAddress(),
+            existing_node_3.getAddress(),
+            existing_node_3.getAttributes(),
+            existing_node_3.getRoles(),
+            Version.CURRENT
+        );
+
+        final ClusterStateTaskExecutor.ClusterTasksResult<JoinTaskExecutor.Task> result = joinTaskExecutor.execute(
+            clusterState,
+            List.of(
+                new JoinTaskExecutor.Task(node_3_new_join, "test"),
+                JoinTaskExecutor.newBecomeMasterTask(),
+                JoinTaskExecutor.newFinishElectionTask()
+            )
+        );
+        final ClusterStateTaskExecutor.TaskResult taskResult = result.executionResults.values().iterator().next();
+        assertTrue(taskResult.isSuccess());
+        DiscoveryNodes resultNodes = result.resultingState.getNodes();
+        assertEquals(Version.CURRENT, resultNodes.get(node_1).getVersion());
+        assertEquals(Version.CURRENT, resultNodes.get(node_2).getVersion());
+        assertEquals(Version.CURRENT, resultNodes.get(node_3).getVersion()); // 7.10.2 in old state but sent new join and processed
+        assertEquals(LegacyESVersion.V_7_10_2, resultNodes.get(node_4).getVersion());
+        assertFalse(resultNodes.nodeExists(node_5));  // 7.10.2 node without active channel will be removed and should rejoin
+        assertEquals(LegacyESVersion.V_7_10_0, resultNodes.get(node_6).getVersion());
+        // 7.9.0 node without active channel but shouldn't get removed
+        assertEquals(LegacyESVersion.V_7_10_0, resultNodes.get(node_7).getVersion());
     }
 
     /**
@@ -313,6 +388,7 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
             allocationService,
             logger,
             rerouteService,
+            null,
             remoteStoreNodeService
         );
 
@@ -420,6 +496,8 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
             .put(MIGRATION_DIRECTION_SETTING.getKey(), RemoteStoreNodeService.Direction.REMOTE_STORE)
             .put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), "mixed")
             .build();
+        final Settings nodeSettings = Settings.builder().put(REMOTE_STORE_MIGRATION_EXPERIMENTAL, "true").build();
+        FeatureFlags.initializeFeatureFlags(nodeSettings);
         Metadata metadata = Metadata.builder().persistentSettings(settings).build();
         ClusterState currentState = ClusterState.builder(ClusterName.DEFAULT)
             .nodes(DiscoveryNodes.builder().add(existingNode).localNodeId(existingNode.getId()).build())
@@ -437,6 +515,8 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
             .put(MIGRATION_DIRECTION_SETTING.getKey(), RemoteStoreNodeService.Direction.REMOTE_STORE)
             .put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), "mixed")
             .build();
+        final Settings nodeSettings = Settings.builder().put(REMOTE_STORE_MIGRATION_EXPERIMENTAL, "true").build();
+        FeatureFlags.initializeFeatureFlags(nodeSettings);
         Metadata metadata = Metadata.builder().persistentSettings(settings).build();
         ClusterState currentState = ClusterState.builder(ClusterName.DEFAULT)
             .nodes(
@@ -684,6 +764,7 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
             allocationService,
             logger,
             rerouteService,
+            null,
             remoteStoreNodeService
         );
 
@@ -729,6 +810,7 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
             allocationService,
             logger,
             rerouteService,
+            null,
             remoteStoreNodeService
         );
 
@@ -792,6 +874,7 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
             allocationService,
             logger,
             rerouteService,
+            null,
             remoteStoreNodeService
         );
 
@@ -837,6 +920,7 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
             allocationService,
             logger,
             rerouteService,
+            null,
             remoteStoreNodeService
         );
 
@@ -883,200 +967,6 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
         validateRepositoryMetadata(result.resultingState, clusterManagerNode, 2);
     }
 
-    public void testNodeJoinInMixedMode() {
-        List<Version> versions = allOpenSearchVersions();
-        assert versions.size() >= 2 : "test requires at least two open search versions";
-        Version baseVersion = versions.get(versions.size() - 2);
-        Version higherVersion = versions.get(versions.size() - 1);
-
-        DiscoveryNode currentNode1 = new DiscoveryNode(UUIDs.base64UUID(), buildNewFakeTransportAddress(), baseVersion);
-        DiscoveryNode currentNode2 = new DiscoveryNode(UUIDs.base64UUID(), buildNewFakeTransportAddress(), baseVersion);
-        DiscoveryNodes currentNodes = DiscoveryNodes.builder()
-            .add(currentNode1)
-            .localNodeId(currentNode1.getId())
-            .add(currentNode2)
-            .localNodeId(currentNode2.getId())
-            .build();
-
-        Settings mixedModeCompatibilitySettings = Settings.builder()
-            .put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), RemoteStoreNodeService.CompatibilityMode.MIXED)
-            .build();
-
-        Metadata metadata = Metadata.builder().persistentSettings(mixedModeCompatibilitySettings).build();
-
-        // joining node of a higher version than the current nodes
-        DiscoveryNode joiningNode1 = new DiscoveryNode(
-            randomAlphaOfLength(10),
-            randomAlphaOfLength(10),
-            buildNewFakeTransportAddress(),
-            remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO),
-            Collections.singleton(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE),
-            higherVersion
-        );
-        final IllegalStateException exception = expectThrows(
-            IllegalStateException.class,
-            () -> JoinTaskExecutor.ensureNodesCompatibility(joiningNode1, currentNodes, metadata)
-        );
-        String reason = String.format(
-            Locale.ROOT,
-            "remote migration : a node [%s] of higher version [%s] is not allowed to join a cluster with maximum version [%s]",
-            joiningNode1,
-            joiningNode1.getVersion(),
-            currentNodes.getMaxNodeVersion()
-        );
-        assertEquals(reason, exception.getMessage());
-
-        // joining node of the same version as the current nodes
-        DiscoveryNode joiningNode2 = new DiscoveryNode(
-            randomAlphaOfLength(10),
-            randomAlphaOfLength(10),
-            buildNewFakeTransportAddress(),
-            remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO),
-            Collections.singleton(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE),
-            baseVersion
-        );
-        JoinTaskExecutor.ensureNodesCompatibility(joiningNode2, currentNodes, metadata);
-    }
-
-    public void testRemoteRoutingTableRepoAbsentNodeJoin() {
-
-        final DiscoveryNode existingNode = new DiscoveryNode(
-            UUIDs.base64UUID(),
-            buildNewFakeTransportAddress(),
-            remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO),
-            DiscoveryNodeRole.BUILT_IN_ROLES,
-            Version.CURRENT
-        );
-
-        ClusterState currentState = ClusterState.builder(ClusterName.DEFAULT)
-            .nodes(DiscoveryNodes.builder().add(existingNode).localNodeId(existingNode.getId()).build())
-            .build();
-
-        DiscoveryNode joiningNode = newDiscoveryNode(remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO));
-        JoinTaskExecutor.ensureNodesCompatibility(joiningNode, currentState.getNodes(), currentState.metadata());
-    }
-
-    public void testRemoteRoutingTableNodeJoinRepoPresentInJoiningNode() {
-        final DiscoveryNode existingNode = new DiscoveryNode(
-            UUIDs.base64UUID(),
-            buildNewFakeTransportAddress(),
-            remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO),
-            DiscoveryNodeRole.BUILT_IN_ROLES,
-            Version.CURRENT
-        );
-        ClusterState currentState = ClusterState.builder(ClusterName.DEFAULT)
-            .nodes(DiscoveryNodes.builder().add(existingNode).localNodeId(existingNode.getId()).build())
-            .build();
-
-        Map<String, String> attr = remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO);
-        attr.putAll(remoteRoutingTableAttributes(ROUTING_TABLE_REPO));
-        DiscoveryNode joiningNode = newDiscoveryNode(attr);
-        JoinTaskExecutor.ensureNodesCompatibility(joiningNode, currentState.getNodes(), currentState.metadata());
-    }
-
-    public void testRemoteRoutingTableNodeJoinRepoPresentInExistingNode() {
-        Map<String, String> attr = remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO);
-        attr.putAll(remoteRoutingTableAttributes(ROUTING_TABLE_REPO));
-        final DiscoveryNode existingNode = new DiscoveryNode(
-            UUIDs.base64UUID(),
-            buildNewFakeTransportAddress(),
-            attr,
-            DiscoveryNodeRole.BUILT_IN_ROLES,
-            Version.CURRENT
-        );
-
-        ClusterState currentState = ClusterState.builder(ClusterName.DEFAULT)
-            .nodes(DiscoveryNodes.builder().add(existingNode).localNodeId(existingNode.getId()).build())
-            .build();
-
-        DiscoveryNode joiningNode = newDiscoveryNode(remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO));
-        assertThrows(
-            IllegalStateException.class,
-            () -> JoinTaskExecutor.ensureNodesCompatibility(joiningNode, currentState.getNodes(), currentState.metadata())
-        );
-    }
-
-    public void testRemoteRoutingTableNodeJoinRepoPresentInBothNode() {
-        Map<String, String> attr = remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO);
-        attr.putAll(remoteRoutingTableAttributes(ROUTING_TABLE_REPO));
-        final DiscoveryNode existingNode = new DiscoveryNode(
-            UUIDs.base64UUID(),
-            buildNewFakeTransportAddress(),
-            attr,
-            DiscoveryNodeRole.BUILT_IN_ROLES,
-            Version.CURRENT
-        );
-
-        ClusterState currentState = ClusterState.builder(ClusterName.DEFAULT)
-            .nodes(DiscoveryNodes.builder().add(existingNode).localNodeId(existingNode.getId()).build())
-            .build();
-
-        DiscoveryNode joiningNode = newDiscoveryNode(attr);
-        JoinTaskExecutor.ensureNodesCompatibility(joiningNode, currentState.getNodes(), currentState.metadata());
-    }
-
-    public void testRemoteRoutingTableNodeJoinNodeWithRemoteAndRoutingRepoDifference() {
-        Map<String, String> attr = remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO);
-        attr.putAll(remoteRoutingTableAttributes(ROUTING_TABLE_REPO));
-        final DiscoveryNode existingNode = new DiscoveryNode(
-            UUIDs.base64UUID(),
-            buildNewFakeTransportAddress(),
-            attr,
-            DiscoveryNodeRole.BUILT_IN_ROLES,
-            Version.CURRENT
-        );
-
-        final DiscoveryNode existingNode2 = new DiscoveryNode(
-            UUIDs.base64UUID(),
-            buildNewFakeTransportAddress(),
-            remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO),
-            DiscoveryNodeRole.BUILT_IN_ROLES,
-            Version.CURRENT
-        );
-
-        ClusterState currentState = ClusterState.builder(ClusterName.DEFAULT)
-            .nodes(DiscoveryNodes.builder().add(existingNode2).add(existingNode).localNodeId(existingNode.getId()).build())
-            .build();
-
-        DiscoveryNode joiningNode = newDiscoveryNode(attr);
-        JoinTaskExecutor.ensureNodesCompatibility(joiningNode, currentState.getNodes(), currentState.metadata());
-    }
-
-    public void testRemoteRoutingTableNodeJoinNodeWithRemoteAndRoutingRepoDifferenceMixedMode() {
-        Map<String, String> attr = remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO);
-        attr.putAll(remoteRoutingTableAttributes(ROUTING_TABLE_REPO));
-        final DiscoveryNode existingNode = new DiscoveryNode(
-            UUIDs.base64UUID(),
-            buildNewFakeTransportAddress(),
-            attr,
-            DiscoveryNodeRole.BUILT_IN_ROLES,
-            Version.CURRENT
-        );
-
-        final DiscoveryNode existingNode2 = new DiscoveryNode(
-            UUIDs.base64UUID(),
-            buildNewFakeTransportAddress(),
-            remoteStoreNodeAttributes(SEGMENT_REPO, TRANSLOG_REPO),
-            DiscoveryNodeRole.BUILT_IN_ROLES,
-            Version.CURRENT
-        );
-
-        final Settings settings = Settings.builder()
-            .put(MIGRATION_DIRECTION_SETTING.getKey(), RemoteStoreNodeService.Direction.REMOTE_STORE)
-            .put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), "mixed")
-            .build();
-        final Settings nodeSettings = Settings.builder().put(REMOTE_STORE_MIGRATION_EXPERIMENTAL, "true").build();
-        FeatureFlags.initializeFeatureFlags(nodeSettings);
-        Metadata metadata = Metadata.builder().persistentSettings(settings).build();
-        ClusterState currentState = ClusterState.builder(ClusterName.DEFAULT)
-            .nodes(DiscoveryNodes.builder().add(existingNode2).add(existingNode).localNodeId(existingNode.getId()).build())
-            .metadata(metadata)
-            .build();
-
-        DiscoveryNode joiningNode = newDiscoveryNode(attr);
-        JoinTaskExecutor.ensureNodesCompatibility(joiningNode, currentState.getNodes(), currentState.metadata());
-    }
-
     private void validateRepositoryMetadata(ClusterState updatedState, DiscoveryNode existingNode, int expectedRepositories)
         throws Exception {
 
@@ -1118,7 +1008,6 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
     private static final String TRANSLOG_REPO = "translog-repo";
     private static final String CLUSTER_STATE_REPO = "cluster-state-repo";
     private static final String COMMON_REPO = "remote-repo";
-    private static final String ROUTING_TABLE_REPO = "routing-table-repo";
 
     private Map<String, String> remoteStoreNodeAttributes(String segmentRepoName, String translogRepoName) {
         return remoteStoreNodeAttributes(segmentRepoName, translogRepoName, CLUSTER_STATE_REPO);
@@ -1179,28 +1068,6 @@ public class JoinTaskExecutorTests extends OpenSearchTestCase {
                 putIfAbsent(clusterStateRepositoryTypeAttributeKey, "s3");
                 putIfAbsent(clusterStateRepositorySettingsAttributeKeyPrefix + "bucket", "state_bucket");
                 putIfAbsent(clusterStateRepositorySettingsAttributeKeyPrefix + "base_path", "/state/path");
-            }
-        };
-    }
-
-    private Map<String, String> remoteRoutingTableAttributes(String repoName) {
-        String routingTableRepositoryTypeAttributeKey = String.format(
-            Locale.getDefault(),
-            REMOTE_STORE_REPOSITORY_TYPE_ATTRIBUTE_KEY_FORMAT,
-            repoName
-        );
-        String routingTableRepositorySettingsAttributeKeyPrefix = String.format(
-            Locale.getDefault(),
-            REMOTE_STORE_REPOSITORY_SETTINGS_ATTRIBUTE_KEY_PREFIX,
-            repoName
-        );
-
-        return new HashMap<>() {
-            {
-                put(REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY, repoName);
-                putIfAbsent(routingTableRepositoryTypeAttributeKey, "s3");
-                putIfAbsent(routingTableRepositorySettingsAttributeKeyPrefix + "bucket", "state_bucket");
-                putIfAbsent(routingTableRepositorySettingsAttributeKeyPrefix + "base_path", "/state/path");
             }
         };
     }

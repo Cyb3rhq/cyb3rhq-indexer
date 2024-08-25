@@ -32,12 +32,12 @@
 
 package org.opensearch.index.get;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.Version;
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.document.DocumentField;
 import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.common.io.stream.StreamInput;
@@ -57,7 +57,6 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -109,8 +108,20 @@ public class GetResult implements Writeable, Iterable<DocumentField>, ToXContent
             if (source.length() == 0) {
                 source = null;
             }
-            documentFields = readFields(in);
-            metaFields = readFields(in);
+            if (in.getVersion().onOrAfter(LegacyESVersion.V_7_3_0)) {
+                documentFields = readFields(in);
+                metaFields = readFields(in);
+            } else {
+                Map<String, DocumentField> fields = readFields(in);
+                documentFields = new HashMap<>();
+                metaFields = new HashMap<>();
+                fields.forEach(
+                    (fieldName, docField) -> (MapperService.META_FIELDS_BEFORE_7DOT8.contains(fieldName) ? metaFields : documentFields).put(
+                        fieldName,
+                        docField
+                    )
+                );
+            }
         } else {
             metaFields = Collections.emptyMap();
             documentFields = Collections.emptyMap();
@@ -400,14 +411,6 @@ public class GetResult implements Writeable, Iterable<DocumentField>, ToXContent
                 }
             }
         }
-
-        if (found == null) {
-            throw new ParsingException(
-                parser.getTokenLocation(),
-                String.format(Locale.ROOT, "Missing required field [%s]", GetResult.FOUND)
-            );
-        }
-
         return new GetResult(index, id, seqNo, primaryTerm, version, found, source, documentFields, metaFields);
     }
 
@@ -446,8 +449,12 @@ public class GetResult implements Writeable, Iterable<DocumentField>, ToXContent
         out.writeBoolean(exists);
         if (exists) {
             out.writeBytesReference(source);
-            writeFields(out, documentFields);
-            writeFields(out, metaFields);
+            if (out.getVersion().onOrAfter(LegacyESVersion.V_7_3_0)) {
+                writeFields(out, documentFields);
+                writeFields(out, metaFields);
+            } else {
+                writeFields(out, this.getFields());
+            }
         }
     }
 

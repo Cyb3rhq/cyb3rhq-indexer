@@ -17,20 +17,15 @@ import org.opensearch.common.SuppressForbidden;
 import org.opensearch.common.annotation.ExperimentalApi;
 import org.opensearch.common.cache.CacheType;
 import org.opensearch.common.cache.ICache;
-import org.opensearch.common.cache.ICacheKey;
 import org.opensearch.common.cache.LoadAwareCacheLoader;
 import org.opensearch.common.cache.RemovalListener;
 import org.opensearch.common.cache.RemovalNotification;
 import org.opensearch.common.cache.RemovalReason;
-import org.opensearch.common.cache.serializer.ICacheKeySerializer;
 import org.opensearch.common.cache.serializer.Serializer;
-import org.opensearch.common.cache.stats.CacheStatsHolder;
-import org.opensearch.common.cache.stats.DefaultCacheStatsHolder;
-import org.opensearch.common.cache.stats.ImmutableCacheStatsHolder;
-import org.opensearch.common.cache.stats.NoopCacheStatsHolder;
 import org.opensearch.common.cache.store.builders.ICacheBuilder;
 import org.opensearch.common.cache.store.config.CacheConfig;
 import org.opensearch.common.collect.Tuple;
+import org.opensearch.common.metrics.CounterMetric;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
@@ -42,12 +37,9 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -57,9 +49,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
-import java.util.function.ToLongBiFunction;
 
 import org.ehcache.Cache;
+import org.ehcache.CachePersistenceException;
 import org.ehcache.PersistentCacheManager;
 import org.ehcache.config.builders.CacheConfigurationBuilder;
 import org.ehcache.config.builders.CacheEventListenerConfigurationBuilder;
@@ -103,39 +95,37 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
     // Unique id associated with this cache.
     private final static String UNIQUE_ID = UUID.randomUUID().toString();
     private final static String THREAD_POOL_ALIAS_PREFIX = "ehcachePool";
+    private final static int MINIMUM_MAX_SIZE_IN_BYTES = 1024 * 100; // 100KB
+
     // A Cache manager can create many caches.
     private final PersistentCacheManager cacheManager;
 
     // Disk cache. Using ByteArrayWrapper to compare two byte[] by values rather than the default reference checks
-    @SuppressWarnings({ "rawtypes" }) // We have to use the raw type as there's no way to pass the "generic class" to ehcache
-    private Cache<ICacheKey, ByteArrayWrapper> cache;
+    private Cache<K, ByteArrayWrapper> cache;
     private final long maxWeightInBytes;
     private final String storagePath;
     private final Class<K> keyType;
     private final Class<V> valueType;
     private final TimeValue expireAfterAccess;
-    private final CacheStatsHolder cacheStatsHolder;
     private final EhCacheEventListener ehCacheEventListener;
     private final String threadPoolAlias;
     private final Settings settings;
-    private final RemovalListener<ICacheKey<K>, V> removalListener;
+    private final RemovalListener<K, V> removalListener;
     private final CacheType cacheType;
     private final String diskCacheAlias;
+    // TODO: Move count to stats once those changes are ready.
+    private final CounterMetric entries = new CounterMetric();
+
     private final Serializer<K, byte[]> keySerializer;
     private final Serializer<V, byte[]> valueSerializer;
-
-    final static int MINIMUM_MAX_SIZE_IN_BYTES = 1024 * 100; // 100KB
-    final static String CACHE_DATA_CLEANUP_DURING_INITIALIZATION_EXCEPTION = "Failed to delete ehcache disk cache under "
-        + "path: %s during initialization. Please clean this up manually and restart the process";
 
     /**
      * Used in computeIfAbsent to synchronize loading of a given key. This is needed as ehcache doesn't provide a
      * computeIfAbsent method.
      */
-    Map<ICacheKey<K>, CompletableFuture<Tuple<ICacheKey<K>, V>>> completableFutureMap = new ConcurrentHashMap<>();
+    Map<K, CompletableFuture<Tuple<K, V>>> completableFutureMap = new ConcurrentHashMap<>();
 
-    @SuppressForbidden(reason = "Ehcache uses File.io")
-    EhcacheDiskCache(Builder<K, V> builder) {
+    private EhcacheDiskCache(Builder<K, V> builder) {
         this.keyType = Objects.requireNonNull(builder.keyType, "Key type shouldn't be null");
         this.valueType = Objects.requireNonNull(builder.valueType, "Value type shouldn't be null");
         this.expireAfterAccess = Objects.requireNonNull(builder.getExpireAfterAcess(), "ExpireAfterAccess value shouldn't " + "be null");
@@ -153,18 +143,6 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
         if (this.storagePath == null || this.storagePath.isBlank()) {
             throw new IllegalArgumentException("Storage path shouldn't be null or empty");
         }
-        // Delete all the previous disk cache related files/data. We don't persist data between process restart for
-        // now which is why need to do this. Clean up in case there was a non graceful restart and we had older disk
-        // cache data still lying around.
-        Path ehcacheDirectory = Paths.get(this.storagePath);
-        if (Files.exists(ehcacheDirectory)) {
-            try {
-                logger.info("Found older disk cache data lying around during initialization under path: {}", this.storagePath);
-                IOUtils.rm(ehcacheDirectory);
-            } catch (IOException e) {
-                throw new OpenSearchException(String.format(CACHE_DATA_CLEANUP_DURING_INITIALIZATION_EXCEPTION, this.storagePath), e);
-            }
-        }
         if (builder.threadPoolAlias == null || builder.threadPoolAlias.isBlank()) {
             this.threadPoolAlias = THREAD_POOL_ALIAS_PREFIX + "DiskWrite#" + UNIQUE_ID;
         } else {
@@ -176,80 +154,58 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
         this.cacheManager = buildCacheManager();
         Objects.requireNonNull(builder.getRemovalListener(), "Removal listener can't be null");
         this.removalListener = builder.getRemovalListener();
-        Objects.requireNonNull(builder.getWeigher(), "Weigher can't be null");
-        this.ehCacheEventListener = new EhCacheEventListener(builder.getRemovalListener(), builder.getWeigher());
+        this.ehCacheEventListener = new EhCacheEventListener(builder.getRemovalListener());
         this.cache = buildCache(Duration.ofMillis(expireAfterAccess.getMillis()), builder);
-        List<String> dimensionNames = Objects.requireNonNull(builder.dimensionNames, "Dimension names can't be null");
-        if (builder.getStatsTrackingEnabled()) {
-            // If this cache is being used, FeatureFlags.PLUGGABLE_CACHE is already on, so we can always use the DefaultCacheStatsHolder
-            // unless statsTrackingEnabled is explicitly set to false in CacheConfig.
-            this.cacheStatsHolder = new DefaultCacheStatsHolder(dimensionNames, EhcacheDiskCacheFactory.EHCACHE_DISK_CACHE_NAME);
-        } else {
-            this.cacheStatsHolder = NoopCacheStatsHolder.getInstance();
-        }
     }
 
-    // Package private for testing
-    PersistentCacheManager getCacheManager() {
-        return this.cacheManager;
-    }
+    private Cache<K, ByteArrayWrapper> buildCache(Duration expireAfterAccess, Builder<K, V> builder) {
+        try {
+            return this.cacheManager.createCache(
+                this.diskCacheAlias,
+                CacheConfigurationBuilder.newCacheConfigurationBuilder(
+                    this.keyType,
+                    ByteArrayWrapper.class,
+                    ResourcePoolsBuilder.newResourcePoolsBuilder().disk(maxWeightInBytes, MemoryUnit.B)
+                ).withExpiry(new ExpiryPolicy<>() {
+                    @Override
+                    public Duration getExpiryForCreation(K key, ByteArrayWrapper value) {
+                        return INFINITE;
+                    }
 
-    @SuppressWarnings({ "rawtypes" })
-    private Cache<ICacheKey, ByteArrayWrapper> buildCache(Duration expireAfterAccess, Builder<K, V> builder) {
-        // Creating the cache requires permissions specified in plugin-security.policy
-        return AccessController.doPrivileged((PrivilegedAction<Cache<ICacheKey, ByteArrayWrapper>>) () -> {
-            try {
-                return this.cacheManager.createCache(
-                    this.diskCacheAlias,
-                    CacheConfigurationBuilder.newCacheConfigurationBuilder(
-                        ICacheKey.class,
-                        ByteArrayWrapper.class,
-                        ResourcePoolsBuilder.newResourcePoolsBuilder().disk(maxWeightInBytes, MemoryUnit.B)
-                    ).withExpiry(new ExpiryPolicy<>() {
-                        @Override
-                        public Duration getExpiryForCreation(ICacheKey key, ByteArrayWrapper value) {
-                            return INFINITE;
-                        }
+                    @Override
+                    public Duration getExpiryForAccess(K key, Supplier<? extends ByteArrayWrapper> value) {
+                        return expireAfterAccess;
+                    }
 
-                        @Override
-                        public Duration getExpiryForAccess(ICacheKey key, Supplier<? extends ByteArrayWrapper> value) {
-                            return expireAfterAccess;
-                        }
-
-                        @Override
-                        public Duration getExpiryForUpdate(
-                            ICacheKey key,
-                            Supplier<? extends ByteArrayWrapper> oldValue,
-                            ByteArrayWrapper newValue
-                        ) {
-                            return INFINITE;
-                        }
-                    })
-                        .withService(getListenerConfiguration(builder))
-                        .withService(
-                            new OffHeapDiskStoreConfiguration(
-                                this.threadPoolAlias,
-                                (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)
-                                    .get(DISK_WRITE_CONCURRENCY_KEY)
-                                    .get(settings),
-                                (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType).get(DISK_SEGMENT_KEY).get(settings)
-                            )
+                    @Override
+                    public Duration getExpiryForUpdate(K key, Supplier<? extends ByteArrayWrapper> oldValue, ByteArrayWrapper newValue) {
+                        return INFINITE;
+                    }
+                })
+                    .withService(getListenerConfiguration(builder))
+                    .withService(
+                        new OffHeapDiskStoreConfiguration(
+                            this.threadPoolAlias,
+                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)
+                                .get(DISK_WRITE_CONCURRENCY_KEY)
+                                .get(settings),
+                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType).get(DISK_SEGMENT_KEY).get(settings)
                         )
-                        .withKeySerializer(new KeySerializerWrapper(keySerializer))
-                        .withValueSerializer(new ByteArrayWrapperSerializer())
+                    )
+                    .withKeySerializer(new KeySerializerWrapper<K>(keySerializer))
+                    .withValueSerializer(new ByteArrayWrapperSerializer())
                 // We pass ByteArrayWrapperSerializer as ehcache's value serializer. If V is an interface, and we pass its
                 // serializer directly to ehcache, ehcache requires the classes match exactly before/after serialization.
                 // This is not always feasible or necessary, like for BytesReference. So, we handle the value serialization
                 // before V hits ehcache.
-                );
-            } catch (IllegalArgumentException ex) {
-                logger.error("Ehcache disk cache initialization failed due to illegal argument: {}", ex.getMessage());
-                throw ex;
-            } catch (IllegalStateException ex) {
-                logger.error("Ehcache disk cache initialization failed: {}", ex.getMessage());
-                throw ex;
-            }
-        });
+            );
+        } catch (IllegalArgumentException ex) {
+            logger.error("Ehcache disk cache initialization failed due to illegal argument: {}", ex.getMessage());
+            throw ex;
+        } catch (IllegalStateException ex) {
+            logger.error("Ehcache disk cache initialization failed: {}", ex.getMessage());
+            throw ex;
+        }
     }
 
     private CacheEventListenerConfigurationBuilder getListenerConfiguration(Builder<K, V> builder) {
@@ -269,39 +225,36 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
     }
 
     // Package private for testing
-    Map<ICacheKey<K>, CompletableFuture<Tuple<ICacheKey<K>, V>>> getCompletableFutureMap() {
+    Map<K, CompletableFuture<Tuple<K, V>>> getCompletableFutureMap() {
         return completableFutureMap;
     }
 
     @SuppressForbidden(reason = "Ehcache uses File.io")
-    PersistentCacheManager buildCacheManager() {
+    private PersistentCacheManager buildCacheManager() {
         // In case we use multiple ehCaches, we can define this cache manager at a global level.
-        // Creating the cache manager also requires permissions specified in plugin-security.policy
-        return AccessController.doPrivileged((PrivilegedAction<PersistentCacheManager>) () -> {
-            return CacheManagerBuilder.newCacheManagerBuilder()
-                .with(CacheManagerBuilder.persistence(new File(storagePath)))
+        return CacheManagerBuilder.newCacheManagerBuilder()
+            .with(CacheManagerBuilder.persistence(new File(storagePath)))
 
-                .using(
-                    PooledExecutionServiceConfigurationBuilder.newPooledExecutionServiceConfigurationBuilder()
-                        .defaultPool(THREAD_POOL_ALIAS_PREFIX + "Default#" + UNIQUE_ID, 1, 3) // Default pool used for other tasks
-                        // like event listeners
-                        .pool(
-                            this.threadPoolAlias,
-                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)
-                                .get(DISK_WRITE_MIN_THREADS_KEY)
-                                .get(settings),
-                            (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)
-                                .get(DISK_WRITE_MAXIMUM_THREADS_KEY)
-                                .get(settings)
-                        )
-                        .build()
-                )
-                .build(true);
-        });
+            .using(
+                PooledExecutionServiceConfigurationBuilder.newPooledExecutionServiceConfigurationBuilder()
+                    .defaultPool(THREAD_POOL_ALIAS_PREFIX + "Default#" + UNIQUE_ID, 1, 3) // Default pool used for other tasks
+                    // like event listeners
+                    .pool(
+                        this.threadPoolAlias,
+                        (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)
+                            .get(DISK_WRITE_MIN_THREADS_KEY)
+                            .get(settings),
+                        (Integer) EhcacheDiskCacheSettings.getSettingListForCacheType(cacheType)
+                            .get(DISK_WRITE_MAXIMUM_THREADS_KEY)
+                            .get(settings)
+                    )
+                    .build()
+            )
+            .build(true);
     }
 
     @Override
-    public V get(ICacheKey<K> key) {
+    public V get(K key) {
         if (key == null) {
             throw new IllegalArgumentException("Key passed to ehcache disk cache was null.");
         }
@@ -310,11 +263,6 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
             value = deserializeValue(cache.get(key));
         } catch (CacheLoadingException ex) {
             throw new OpenSearchException("Exception occurred while trying to fetch item from ehcache disk cache");
-        }
-        if (value != null) {
-            cacheStatsHolder.incrementHits(key.dimensions);
-        } else {
-            cacheStatsHolder.incrementMisses(key.dimensions);
         }
         return value;
     }
@@ -325,7 +273,7 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
      * @param value Type of value.
      */
     @Override
-    public void put(ICacheKey<K> key, V value) {
+    public void put(K key, V value) {
         try {
             cache.put(key, serializeValue(value));
         } catch (CacheWritingException ex) {
@@ -341,31 +289,26 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
      * @throws Exception when either internal get or put calls fail.
      */
     @Override
-    public V computeIfAbsent(ICacheKey<K> key, LoadAwareCacheLoader<ICacheKey<K>, V> loader) throws Exception {
-        // Ehcache doesn't provide any computeIfAbsent function. Exposes putIfAbsent but that works differently and is
+    public V computeIfAbsent(K key, LoadAwareCacheLoader<K, V> loader) throws Exception {
+        // Ehache doesn't provide any computeIfAbsent function. Exposes putIfAbsent but that works differently and is
         // not performant in case there are multiple concurrent request for same key. Below is our own custom
         // implementation of computeIfAbsent on top of ehcache. Inspired by OpenSearch Cache implementation.
         V value = deserializeValue(cache.get(key));
         if (value == null) {
             value = compute(key, loader);
         }
-        if (!loader.isLoaded()) {
-            cacheStatsHolder.incrementHits(key.dimensions);
-        } else {
-            cacheStatsHolder.incrementMisses(key.dimensions);
-        }
         return value;
     }
 
-    private V compute(ICacheKey<K> key, LoadAwareCacheLoader<ICacheKey<K>, V> loader) throws Exception {
+    private V compute(K key, LoadAwareCacheLoader<K, V> loader) throws Exception {
         // A future that returns a pair of key/value.
-        CompletableFuture<Tuple<ICacheKey<K>, V>> completableFuture = new CompletableFuture<>();
+        CompletableFuture<Tuple<K, V>> completableFuture = new CompletableFuture<>();
         // Only one of the threads will succeed putting a future into map for the same key.
         // Rest will fetch existing future.
-        CompletableFuture<Tuple<ICacheKey<K>, V>> future = completableFutureMap.putIfAbsent(key, completableFuture);
+        CompletableFuture<Tuple<K, V>> future = completableFutureMap.putIfAbsent(key, completableFuture);
         // Handler to handle results post processing. Takes a tuple<key, value> or exception as an input and returns
         // the value. Also before returning value, puts the value in cache.
-        BiFunction<Tuple<ICacheKey<K>, V>, Throwable, V> handler = (pair, ex) -> {
+        BiFunction<Tuple<K, V>, Throwable, V> handler = (pair, ex) -> {
             V value = null;
             if (pair != null) {
                 cache.put(pair.v1(), serializeValue(pair.v2()));
@@ -415,14 +358,9 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
      * @param key key to be invalidated.
      */
     @Override
-    public void invalidate(ICacheKey<K> key) {
+    public void invalidate(K key) {
         try {
-            if (key.getDropStatsForDimensions()) {
-                cacheStatsHolder.removeDimensions(key.dimensions);
-            }
-            if (key.key != null) {
-                cache.remove(key);
-            }
+            cache.remove(key);
         } catch (CacheWritingException ex) {
             // Handle
             throw new RuntimeException(ex);
@@ -433,7 +371,7 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
     @Override
     public void invalidateAll() {
         cache.clear();
-        cacheStatsHolder.reset();
+        this.entries.dec(this.entries.count()); // reset to zero.
     }
 
     /**
@@ -441,18 +379,17 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
      * @return Iterable
      */
     @Override
-    public Iterable<ICacheKey<K>> keys() {
+    public Iterable<K> keys() {
         return () -> new EhCacheKeyIterator<>(cache.iterator());
     }
 
     /**
      * Gives the current count of keys in disk cache.
-     * If enableStatsTracking is set to false in the builder, always returns 0.
      * @return current count of keys
      */
     @Override
     public long count() {
-        return cacheStatsHolder.count();
+        return entries.count();
     }
 
     @Override
@@ -463,43 +400,31 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
     @Override
     @SuppressForbidden(reason = "Ehcache uses File.io")
     public void close() {
+        cacheManager.removeCache(this.diskCacheAlias);
+        cacheManager.close();
         try {
-            cacheManager.close();
-        } catch (Exception e) {
-            logger.error(() -> new ParameterizedMessage("Exception occurred while trying to close ehcache manager"), e);
-        }
-        // Delete all the disk cache related files/data in case it is present
-        Path ehcacheDirectory = Paths.get(this.storagePath);
-        if (Files.exists(ehcacheDirectory)) {
-            try {
+            cacheManager.destroyCache(this.diskCacheAlias);
+            // Delete all the disk cache related files/data
+            Path ehcacheDirectory = Paths.get(this.storagePath);
+            if (Files.exists(ehcacheDirectory)) {
                 IOUtils.rm(ehcacheDirectory);
-            } catch (IOException e) {
-                logger.error(() -> new ParameterizedMessage("Failed to delete ehcache disk cache data under path: {}", this.storagePath));
             }
+        } catch (CachePersistenceException e) {
+            throw new OpenSearchException("Exception occurred while destroying ehcache and associated data", e);
+        } catch (IOException e) {
+            logger.error(() -> new ParameterizedMessage("Failed to delete ehcache disk cache data under path: {}", this.storagePath));
         }
-
-    }
-
-    /**
-     * Relevant stats for this cache, aggregated by levels.
-     * @param levels The levels to aggregate by.
-     * @return ImmutableCacheStatsHolder
-     */
-    @Override
-    public ImmutableCacheStatsHolder stats(String[] levels) {
-        return cacheStatsHolder.getImmutableCacheStatsHolder(levels);
     }
 
     /**
      * This iterator wraps ehCache iterator and only iterates over its keys.
      * @param <K> Type of key
      */
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    class EhCacheKeyIterator<K> implements Iterator<ICacheKey<K>> {
+    class EhCacheKeyIterator<K> implements Iterator<K> {
 
-        Iterator<Cache.Entry<ICacheKey, ByteArrayWrapper>> iterator;
+        Iterator<Cache.Entry<K, ByteArrayWrapper>> iterator;
 
-        EhCacheKeyIterator(Iterator<Cache.Entry<ICacheKey, ByteArrayWrapper>> iterator) {
+        EhCacheKeyIterator(Iterator<Cache.Entry<K, ByteArrayWrapper>> iterator) {
             this.iterator = iterator;
         }
 
@@ -509,7 +434,7 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
         }
 
         @Override
-        public ICacheKey<K> next() {
+        public K next() {
             if (!hasNext()) {
                 throw new NoSuchElementException();
             }
@@ -525,60 +450,43 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
     /**
      * Wrapper over Ehcache original listener to listen to desired events and notify desired subscribers.
      */
-    class EhCacheEventListener implements CacheEventListener<ICacheKey<K>, ByteArrayWrapper> {
-        private final RemovalListener<ICacheKey<K>, V> removalListener;
-        private ToLongBiFunction<ICacheKey<K>, V> weigher;
+    class EhCacheEventListener implements CacheEventListener<K, ByteArrayWrapper> {
 
-        EhCacheEventListener(RemovalListener<ICacheKey<K>, V> removalListener, ToLongBiFunction<ICacheKey<K>, V> weigher) {
+        private final RemovalListener<K, V> removalListener;
+
+        EhCacheEventListener(RemovalListener<K, V> removalListener) {
             this.removalListener = removalListener;
-            this.weigher = weigher;
-        }
-
-        private long getOldValuePairSize(CacheEvent<? extends ICacheKey<K>, ? extends ByteArrayWrapper> event) {
-            return weigher.applyAsLong(event.getKey(), deserializeValue(event.getOldValue()));
-        }
-
-        private long getNewValuePairSize(CacheEvent<? extends ICacheKey<K>, ? extends ByteArrayWrapper> event) {
-            return weigher.applyAsLong(event.getKey(), deserializeValue(event.getNewValue()));
         }
 
         @Override
-        public void onEvent(CacheEvent<? extends ICacheKey<K>, ? extends ByteArrayWrapper> event) {
+        public void onEvent(CacheEvent<? extends K, ? extends ByteArrayWrapper> event) {
             switch (event.getType()) {
                 case CREATED:
-                    cacheStatsHolder.incrementItems(event.getKey().dimensions);
-                    cacheStatsHolder.incrementSizeInBytes(event.getKey().dimensions, getNewValuePairSize(event));
+                    entries.inc();
                     assert event.getOldValue() == null;
                     break;
                 case EVICTED:
                     this.removalListener.onRemoval(
                         new RemovalNotification<>(event.getKey(), deserializeValue(event.getOldValue()), RemovalReason.EVICTED)
                     );
-                    cacheStatsHolder.decrementItems(event.getKey().dimensions);
-                    cacheStatsHolder.decrementSizeInBytes(event.getKey().dimensions, getOldValuePairSize(event));
-                    cacheStatsHolder.incrementEvictions(event.getKey().dimensions);
+                    entries.dec();
                     assert event.getNewValue() == null;
                     break;
                 case REMOVED:
+                    entries.dec();
                     this.removalListener.onRemoval(
                         new RemovalNotification<>(event.getKey(), deserializeValue(event.getOldValue()), RemovalReason.EXPLICIT)
                     );
-                    cacheStatsHolder.decrementItems(event.getKey().dimensions);
-                    cacheStatsHolder.decrementSizeInBytes(event.getKey().dimensions, getOldValuePairSize(event));
                     assert event.getNewValue() == null;
                     break;
                 case EXPIRED:
                     this.removalListener.onRemoval(
                         new RemovalNotification<>(event.getKey(), deserializeValue(event.getOldValue()), RemovalReason.INVALIDATED)
                     );
-                    cacheStatsHolder.decrementItems(event.getKey().dimensions);
-                    cacheStatsHolder.decrementSizeInBytes(event.getKey().dimensions, getOldValuePairSize(event));
+                    entries.dec();
                     assert event.getNewValue() == null;
                     break;
                 case UPDATED:
-                    long newSize = getNewValuePairSize(event);
-                    long oldSize = getOldValuePairSize(event);
-                    cacheStatsHolder.incrementSizeInBytes(event.getKey().dimensions, newSize - oldSize);
                     break;
                 default:
                     break;
@@ -587,14 +495,13 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
     }
 
     /**
-     * Wrapper over ICacheKeySerializer which is compatible with ehcache's serializer requirements.
+     * Wrapper over Serializer which is compatible with ehcache's serializer requirements.
      */
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    private class KeySerializerWrapper implements org.ehcache.spi.serialization.Serializer<ICacheKey> {
-        private ICacheKeySerializer<K> serializer;
+    private class KeySerializerWrapper<T> implements org.ehcache.spi.serialization.Serializer<T> {
+        private Serializer<T, byte[]> serializer;
 
-        public KeySerializerWrapper(Serializer<K, byte[]> internalKeySerializer) {
-            this.serializer = new ICacheKeySerializer<>(internalKeySerializer);
+        public KeySerializerWrapper(Serializer<T, byte[]> keySerializer) {
+            this.serializer = keySerializer;
         }
 
         // This constructor must be present, but does not have to work as we are not actually persisting the disk
@@ -603,19 +510,19 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
         public KeySerializerWrapper(ClassLoader classLoader, FileBasedPersistenceContext persistenceContext) {}
 
         @Override
-        public ByteBuffer serialize(ICacheKey object) throws SerializerException {
+        public ByteBuffer serialize(T object) throws SerializerException {
             return ByteBuffer.wrap(serializer.serialize(object));
         }
 
         @Override
-        public ICacheKey<K> read(ByteBuffer binary) throws ClassNotFoundException, SerializerException {
+        public T read(ByteBuffer binary) throws ClassNotFoundException, SerializerException {
             byte[] arr = new byte[binary.remaining()];
             binary.get(arr);
             return serializer.deserialize(arr);
         }
 
         @Override
-        public boolean equals(ICacheKey object, ByteBuffer binary) throws ClassNotFoundException, SerializerException {
+        public boolean equals(T object, ByteBuffer binary) throws ClassNotFoundException, SerializerException {
             byte[] arr = new byte[binary.remaining()];
             binary.get(arr);
             return serializer.equals(object, arr);
@@ -659,7 +566,8 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
      * @return the serialized value
      */
     private ByteArrayWrapper serializeValue(V value) {
-        return new ByteArrayWrapper(valueSerializer.serialize(value));
+        ByteArrayWrapper result = new ByteArrayWrapper(valueSerializer.serialize(value));
+        return result;
     }
 
     /**
@@ -717,8 +625,6 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
                 .setValueType(config.getValueType())
                 .setKeySerializer(keySerializer)
                 .setValueSerializer(valueSerializer)
-                .setDimensionNames(config.getDimensionNames())
-                .setWeigher(config.getWeigher())
                 .setRemovalListener(config.getRemovalListener())
                 .setExpireAfterAccess((TimeValue) settingList.get(DISK_CACHE_EXPIRE_AFTER_ACCESS_KEY).get(settings))
                 .setMaximumWeightInBytes((Long) settingList.get(DISK_MAX_SIZE_IN_BYTES_KEY).get(settings))
@@ -752,7 +658,6 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
         private Class<K> keyType;
 
         private Class<V> valueType;
-        private List<String> dimensionNames;
         private Serializer<K, byte[]> keySerializer;
         private Serializer<V, byte[]> valueSerializer;
 
@@ -832,16 +737,6 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
         }
 
         /**
-         * Sets the allowed dimension names for keys that will enter this cache.
-         * @param dimensionNames A list of dimension names this cache will accept
-         * @return builder
-         */
-        public Builder<K, V> setDimensionNames(List<String> dimensionNames) {
-            this.dimensionNames = dimensionNames;
-            return this;
-        }
-
-        /**
          * Sets the key serializer for this cache.
          * @param keySerializer the key serializer
          * @return builder
@@ -869,7 +764,7 @@ public class EhcacheDiskCache<K, V> implements ICache<K, V> {
 
     /**
      * A wrapper over byte[], with equals() that works using Arrays.equals().
-     * Necessary due to a limitation in how Ehcache compares byte[].
+     * Necessary due to a bug in Ehcache.
      */
     static class ByteArrayWrapper {
         private final byte[] value;

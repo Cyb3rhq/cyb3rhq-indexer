@@ -9,15 +9,12 @@
 package org.opensearch.common.cache.store.config;
 
 import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.cache.ICacheKey;
 import org.opensearch.common.cache.RemovalListener;
 import org.opensearch.common.cache.policy.CachedQueryResult;
 import org.opensearch.common.cache.serializer.Serializer;
-import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
 
-import java.util.List;
 import java.util.function.Function;
 import java.util.function.ToLongBiFunction;
 
@@ -44,11 +41,9 @@ public class CacheConfig<K, V> {
     /**
      * Represents a function that calculates the size or weight of a key-value pair.
      */
-    private final ToLongBiFunction<ICacheKey<K>, V> weigher;
+    private final ToLongBiFunction<K, V> weigher;
 
-    private final RemovalListener<ICacheKey<K>, V> removalListener;
-
-    private final List<String> dimensionNames;
+    private final RemovalListener<K, V> removalListener;
 
     // Serializers for keys and values. Not required for all caches.
     private final Serializer<K, ?> keySerializer;
@@ -66,10 +61,6 @@ public class CacheConfig<K, V> {
      */
     private final TimeValue expireAfterAccess;
 
-    private final ClusterSettings clusterSettings;
-
-    private final boolean statsTrackingEnabled;
-
     private CacheConfig(Builder<K, V> builder) {
         this.keyType = builder.keyType;
         this.valueType = builder.valueType;
@@ -78,12 +69,9 @@ public class CacheConfig<K, V> {
         this.weigher = builder.weigher;
         this.keySerializer = builder.keySerializer;
         this.valueSerializer = builder.valueSerializer;
-        this.dimensionNames = builder.dimensionNames;
         this.cachedResultParser = builder.cachedResultParser;
         this.maxSizeInBytes = builder.maxSizeInBytes;
         this.expireAfterAccess = builder.expireAfterAccess;
-        this.clusterSettings = builder.clusterSettings;
-        this.statsTrackingEnabled = builder.statsTrackingEnabled;
     }
 
     public Class<K> getKeyType() {
@@ -98,7 +86,7 @@ public class CacheConfig<K, V> {
         return settings;
     }
 
-    public RemovalListener<ICacheKey<K>, V> getRemovalListener() {
+    public RemovalListener<K, V> getRemovalListener() {
         return removalListener;
     }
 
@@ -110,16 +98,12 @@ public class CacheConfig<K, V> {
         return valueSerializer;
     }
 
-    public ToLongBiFunction<ICacheKey<K>, V> getWeigher() {
+    public ToLongBiFunction<K, V> getWeigher() {
         return weigher;
     }
 
     public Function<V, CachedQueryResult.PolicyValues> getCachedResultParser() {
         return cachedResultParser;
-    }
-
-    public List<String> getDimensionNames() {
-        return dimensionNames;
     }
 
     public Long getMaxSizeInBytes() {
@@ -128,14 +112,6 @@ public class CacheConfig<K, V> {
 
     public TimeValue getExpireAfterAccess() {
         return expireAfterAccess;
-    }
-
-    public ClusterSettings getClusterSettings() {
-        return clusterSettings;
-    }
-
-    public boolean getStatsTrackingEnabled() {
-        return statsTrackingEnabled;
     }
 
     /**
@@ -151,18 +127,17 @@ public class CacheConfig<K, V> {
 
         private Class<V> valueType;
 
-        private RemovalListener<ICacheKey<K>, V> removalListener;
-        private List<String> dimensionNames;
+        private RemovalListener<K, V> removalListener;
+
         private Serializer<K, ?> keySerializer;
         private Serializer<V, ?> valueSerializer;
-        private ToLongBiFunction<ICacheKey<K>, V> weigher;
+
+        private ToLongBiFunction<K, V> weigher;
         private Function<V, CachedQueryResult.PolicyValues> cachedResultParser;
 
         private long maxSizeInBytes;
 
         private TimeValue expireAfterAccess;
-        private ClusterSettings clusterSettings;
-        private boolean statsTrackingEnabled = true;
 
         public Builder() {}
 
@@ -181,13 +156,8 @@ public class CacheConfig<K, V> {
             return this;
         }
 
-        public Builder<K, V> setRemovalListener(RemovalListener<ICacheKey<K>, V> removalListener) {
+        public Builder<K, V> setRemovalListener(RemovalListener<K, V> removalListener) {
             this.removalListener = removalListener;
-            return this;
-        }
-
-        public Builder<K, V> setWeigher(ToLongBiFunction<ICacheKey<K>, V> weigher) {
-            this.weigher = weigher;
             return this;
         }
 
@@ -201,8 +171,8 @@ public class CacheConfig<K, V> {
             return this;
         }
 
-        public Builder<K, V> setDimensionNames(List<String> dimensionNames) {
-            this.dimensionNames = dimensionNames;
+        public Builder<K, V> setWeigher(ToLongBiFunction<K, V> weigher) {
+            this.weigher = weigher;
             return this;
         }
 
@@ -218,16 +188,6 @@ public class CacheConfig<K, V> {
 
         public Builder<K, V> setExpireAfterAccess(TimeValue expireAfterAccess) {
             this.expireAfterAccess = expireAfterAccess;
-            return this;
-        }
-
-        public Builder<K, V> setClusterSettings(ClusterSettings clusterSettings) {
-            this.clusterSettings = clusterSettings;
-            return this;
-        }
-
-        public Builder<K, V> setStatsTrackingEnabled(boolean statsTrackingEnabled) {
-            this.statsTrackingEnabled = statsTrackingEnabled;
             return this;
         }
 

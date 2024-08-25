@@ -139,6 +139,19 @@ public interface Repository extends LifecycleComponent {
     void getRepositoryData(ActionListener<RepositoryData> listener);
 
     /**
+     * Starts snapshotting process
+     *
+     * @param snapshotId snapshot id
+     * @param indices    list of indices to be snapshotted
+     * @param metadata   cluster metadata
+     *
+     * @deprecated this method is only used when taking snapshots in a mixed version cluster where a cluster-manager node older than
+     *             {@link org.opensearch.snapshots.SnapshotsService#NO_REPO_INITIALIZE_VERSION} is present.
+     */
+    @Deprecated
+    void initializeSnapshot(SnapshotId snapshotId, List<IndexId> indices, Metadata metadata);
+
+    /**
      * Finalizes snapshotting process
      * <p>
      * This method is called on cluster-manager after all shards are snapshotted.
@@ -207,16 +220,9 @@ public interface Repository extends LifecycleComponent {
     long getRestoreThrottleTimeInNanos();
 
     /**
-     * Returns upload throttle time in nanoseconds
+     * Returns restore throttle time in nanoseconds
      */
     long getRemoteUploadThrottleTimeInNanos();
-
-    /**
-     * Returns low priority upload throttle time in nanoseconds
-     */
-    default long getLowPriorityRemoteUploadThrottleTimeInNanos() {
-        return 0;
-    }
 
     /**
      * Returns restore throttle time in nanoseconds

@@ -61,7 +61,7 @@ import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.MappingLookup;
 import org.opensearch.index.mapper.NumberFieldMapper;
 import org.opensearch.index.mapper.Uid;
-import org.opensearch.join.ParentJoinModulePlugin;
+import org.opensearch.join.ParentJoinPlugin;
 import org.opensearch.join.mapper.MetaJoinFieldMapper;
 import org.opensearch.join.mapper.ParentJoinFieldMapper;
 import org.opensearch.plugins.SearchPlugin;
@@ -350,6 +350,6 @@ public class ChildrenToParentAggregatorTests extends AggregatorTestCase {
 
     @Override
     protected List<SearchPlugin> getSearchPlugins() {
-        return Collections.singletonList(new ParentJoinModulePlugin());
+        return Collections.singletonList(new ParentJoinPlugin());
     }
 }

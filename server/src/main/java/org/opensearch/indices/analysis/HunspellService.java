@@ -147,7 +147,7 @@ public class HunspellService {
     }
 
     private Path resolveHunspellDirectory(Environment env) {
-        return env.configDir().resolve("hunspell");
+        return env.configFile().resolve("hunspell");
     }
 
     /**
@@ -221,7 +221,7 @@ public class HunspellService {
 
             affixStream = Files.newInputStream(affixFiles[0]);
 
-            try (Directory tmp = new NIOFSDirectory(env.tmpDir())) {
+            try (Directory tmp = new NIOFSDirectory(env.tmpFile())) {
                 return new Dictionary(tmp, "hunspell", affixStream, dicStreams, ignoreCase);
             }
 

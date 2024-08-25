@@ -39,7 +39,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
-import org.opensearch.cluster.ClusterManagerMetrics;
 import org.opensearch.cluster.ClusterModule;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.ClusterStateTaskListener;
@@ -90,7 +89,6 @@ import org.opensearch.monitor.NodeHealthService;
 import org.opensearch.monitor.StatusInfo;
 import org.opensearch.node.remotestore.RemoteStoreNodeService;
 import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.telemetry.metrics.noop.NoopMetricsRegistry;
 import org.opensearch.telemetry.tracing.noop.NoopTracer;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.test.disruption.DisruptableMockTransport;
@@ -1146,8 +1144,7 @@ public class AbstractCoordinatorTestCase extends OpenSearchTestCase {
                     settings,
                     clusterSettings,
                     deterministicTaskQueue,
-                    threadPool,
-                    new ClusterManagerMetrics(NoopMetricsRegistry.INSTANCE)
+                    threadPool
                 );
                 clusterService = new ClusterService(settings, clusterSettings, clusterManagerService, clusterApplierService);
                 clusterService.setNodeConnectionsService(
@@ -1183,9 +1180,7 @@ public class AbstractCoordinatorTestCase extends OpenSearchTestCase {
                     getElectionStrategy(),
                     nodeHealthService,
                     persistedStateRegistry,
-                    remoteStoreNodeService,
-                    new ClusterManagerMetrics(NoopMetricsRegistry.INSTANCE),
-                    null
+                    remoteStoreNodeService
                 );
                 clusterManagerService.setClusterStatePublisher(coordinator);
                 final GatewayService gatewayService = new GatewayService(
@@ -1599,10 +1594,9 @@ public class AbstractCoordinatorTestCase extends OpenSearchTestCase {
             Settings settings,
             ClusterSettings clusterSettings,
             DeterministicTaskQueue deterministicTaskQueue,
-            ThreadPool threadPool,
-            ClusterManagerMetrics clusterManagerMetrics
+            ThreadPool threadPool
         ) {
-            super(nodeName, settings, clusterSettings, threadPool, clusterManagerMetrics);
+            super(nodeName, settings, clusterSettings, threadPool);
             this.nodeName = nodeName;
             this.deterministicTaskQueue = deterministicTaskQueue;
             addStateApplier(event -> {

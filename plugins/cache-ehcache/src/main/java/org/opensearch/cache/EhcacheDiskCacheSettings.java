@@ -24,11 +24,6 @@ import static org.opensearch.common.settings.Setting.Property.NodeScope;
 public class EhcacheDiskCacheSettings {
 
     /**
-     * Default cache size in bytes ie 1gb.
-     */
-    public static final long DEFAULT_CACHE_SIZE_IN_BYTES = 1073741824L;
-
-    /**
      * Ehcache disk write minimum threads for its pool
      *
      * Setting pattern: {cache_type}.ehcache_disk.min_threads
@@ -104,7 +99,7 @@ public class EhcacheDiskCacheSettings {
      */
     public static final Setting.AffixSetting<Long> DISK_CACHE_MAX_SIZE_IN_BYTES_SETTING = Setting.suffixKeySetting(
         EhcacheDiskCache.EhcacheDiskCacheFactory.EHCACHE_DISK_CACHE_NAME + ".max_size_in_bytes",
-        (key) -> Setting.longSetting(key, DEFAULT_CACHE_SIZE_IN_BYTES, NodeScope)
+        (key) -> Setting.longSetting(key, 1073741824L, NodeScope)
     );
 
     /**

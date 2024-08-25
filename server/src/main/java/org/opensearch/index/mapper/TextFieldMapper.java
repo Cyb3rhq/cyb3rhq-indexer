@@ -69,6 +69,7 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.automaton.Automata;
 import org.apache.lucene.util.automaton.Automaton;
 import org.apache.lucene.util.automaton.Operations;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.common.collect.Iterators;
 import org.opensearch.common.lucene.Lucene;
@@ -433,7 +434,7 @@ public class TextFieldMapper extends ParametrizedFieldMapper {
              * or a multi-field). This way search will continue to work on old indices and new indices
              * will use the expected full name.
              */
-            String fullName = buildFullName(context);
+            String fullName = indexCreatedVersion.before(LegacyESVersion.V_7_2_1) ? name() : buildFullName(context);
             // Copy the index options of the main field to allow phrase queries on
             // the prefix field.
             FieldType pft = new FieldType(fieldType);
@@ -448,6 +449,7 @@ public class TextFieldMapper extends ParametrizedFieldMapper {
                 pft.setStoreTermVectorOffsets(true);
             }
             PrefixFieldType prefixFieldType = new PrefixFieldType(tft, fullName + "._index_prefix", indexPrefixes.get());
+            prefixFieldType.setAnalyzer(analyzers.getIndexAnalyzer());
             tft.setPrefixFieldType(prefixFieldType);
             return new PrefixFieldMapper(pft, prefixFieldType);
         }
@@ -521,24 +523,17 @@ public class TextFieldMapper extends ParametrizedFieldMapper {
         private final int minChars;
         private final int maxChars;
         private final Analyzer delegate;
-        private final int positionIncrementGap;
 
-        PrefixWrappedAnalyzer(Analyzer delegate, int minChars, int maxChars, int positionIncrementGap) {
+        PrefixWrappedAnalyzer(Analyzer delegate, int minChars, int maxChars) {
             super(delegate.getReuseStrategy());
             this.delegate = delegate;
             this.minChars = minChars;
             this.maxChars = maxChars;
-            this.positionIncrementGap = positionIncrementGap;
         }
 
         @Override
         protected Analyzer getWrappedAnalyzer(String fieldName) {
             return delegate;
-        }
-
-        @Override
-        public int getPositionIncrementGap(String fieldName) {
-            return positionIncrementGap;
         }
 
         @Override
@@ -594,18 +589,17 @@ public class TextFieldMapper extends ParametrizedFieldMapper {
 
         final int minChars;
         final int maxChars;
-        final TextFieldType parent;
+        final TextFieldType parentField;
 
         PrefixFieldType(TextFieldType parentField, String name, PrefixConfig config) {
             this(parentField, name, config.minChars, config.maxChars);
         }
 
-        PrefixFieldType(TextFieldType parent, String name, int minChars, int maxChars) {
-            super(name, true, false, false, parent.getTextSearchInfo(), Collections.emptyMap());
+        PrefixFieldType(TextFieldType parentField, String name, int minChars, int maxChars) {
+            super(name, true, false, false, parentField.getTextSearchInfo(), Collections.emptyMap());
             this.minChars = minChars;
             this.maxChars = maxChars;
-            this.parent = parent;
-            setAnalyzer(parent.indexAnalyzer());
+            this.parentField = parentField;
         }
 
         @Override
@@ -616,13 +610,8 @@ public class TextFieldMapper extends ParametrizedFieldMapper {
         }
 
         void setAnalyzer(NamedAnalyzer delegate) {
-            String analyzerName = delegate.name();
             setIndexAnalyzer(
-                new NamedAnalyzer(
-                    analyzerName,
-                    AnalyzerScope.INDEX,
-                    new PrefixWrappedAnalyzer(delegate.analyzer(), minChars, maxChars, delegate.getPositionIncrementGap(analyzerName))
-                )
+                new NamedAnalyzer(delegate.name(), AnalyzerScope.INDEX, new PrefixWrappedAnalyzer(delegate.analyzer(), minChars, maxChars))
             );
         }
 
@@ -651,7 +640,7 @@ public class TextFieldMapper extends ParametrizedFieldMapper {
             Automaton automaton = Operations.concatenate(automata);
             AutomatonQuery query = AutomatonQueries.createAutomatonQuery(new Term(name(), value + "*"), automaton, method);
             return new BooleanQuery.Builder().add(query, BooleanClause.Occur.SHOULD)
-                .add(new TermQuery(new Term(parent.name(), value)), BooleanClause.Occur.SHOULD)
+                .add(new TermQuery(new Term(parentField.name(), value)), BooleanClause.Occur.SHOULD)
                 .build();
         }
 

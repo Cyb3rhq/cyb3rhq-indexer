@@ -31,11 +31,14 @@
 
 package org.opensearch.upgrades;
 
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.http.util.EntityUtils;
+import org.apache.http.ParseException;
+
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
+import org.opensearch.client.ResponseException;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.Booleans;
 import org.opensearch.common.io.Streams;
@@ -56,6 +59,8 @@ import java.util.concurrent.TimeUnit;
 
 import static org.opensearch.cluster.routing.UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING;
 import static org.opensearch.rest.action.search.RestSearchAction.TOTAL_HITS_AS_INT_PARAM;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.either;
 import static org.opensearch.test.OpenSearchIntegTestCase.CODECS;
 
 /**
@@ -262,6 +267,7 @@ public class IndexingIT extends AbstractRollingTestCase {
      * @throws Exception if index creation fail
      * @throws UnsupportedOperationException if cluster type is unknown
      */
+    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/7679")
     public void testIndexingWithSegRep() throws Exception {
         if (UPGRADE_FROM_VERSION.before(Version.V_2_4_0)) {
             logger.info("--> Skip test for version {} where segment replication feature is not available", UPGRADE_FROM_VERSION);
@@ -460,7 +466,18 @@ public class IndexingIT extends AbstractRollingTestCase {
                     }
                 }
 
-                client().performRequest(bulk);
+                if (minNodeVersion.before(LegacyESVersion.V_7_5_0)) {
+                    ResponseException e = expectThrows(ResponseException.class, () -> client().performRequest(bulk));
+                    assertEquals(400, e.getResponse().getStatusLine().getStatusCode());
+                    assertThat(e.getMessage(),
+                        // if request goes to 7.5+ node
+                        either(containsString("optype create not supported for indexing requests without explicit id until"))
+                            // if request goes to < 7.5 node
+                            .or(containsString("an id must be provided if version type or value are set")
+                            ));
+                } else {
+                    client().performRequest(bulk);
+                }
                 break;
             case UPGRADED:
                 client().performRequest(bulk);

@@ -10,7 +10,7 @@ package org.opensearch.test;
 
 import com.carrotsearch.randomizedtesting.RandomizedContext;
 
-import org.apache.hc.core5.http.HttpHost;
+import org.apache.http.HttpHost;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.action.admin.cluster.node.info.NodeInfo;
@@ -210,7 +210,7 @@ class OpenSearchTestClusterRule implements MethodRule {
             if (node.getInfo(HttpInfo.class) != null) {
                 TransportAddress publishAddress = node.getInfo(HttpInfo.class).address().publishAddress();
                 InetSocketAddress address = publishAddress.address();
-                hosts.add(new HttpHost(protocol, NetworkAddress.format(address.getAddress()), address.getPort()));
+                hosts.add(new HttpHost(NetworkAddress.format(address.getAddress()), address.getPort(), protocol));
             }
         }
         RestClientBuilder builder = RestClient.builder(hosts.toArray(new HttpHost[0]));

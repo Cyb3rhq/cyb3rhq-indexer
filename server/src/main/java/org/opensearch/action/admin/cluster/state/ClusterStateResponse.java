@@ -32,6 +32,7 @@
 
 package org.opensearch.action.admin.cluster.state;
 
+import org.opensearch.LegacyESVersion;
 import org.opensearch.cluster.ClusterName;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.node.DiscoveryNodes;
@@ -39,6 +40,7 @@ import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.core.action.ActionResponse;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.unit.ByteSizeValue;
 
 import java.io.IOException;
 import java.util.Objects;
@@ -59,6 +61,9 @@ public class ClusterStateResponse extends ActionResponse {
         super(in);
         clusterName = new ClusterName(in);
         clusterState = in.readOptionalWriteable(innerIn -> ClusterState.readFrom(innerIn, null));
+        if (in.getVersion().before(LegacyESVersion.V_7_0_0)) {
+            new ByteSizeValue(in);
+        }
         waitForTimedOut = in.readBoolean();
     }
 
@@ -95,6 +100,9 @@ public class ClusterStateResponse extends ActionResponse {
     public void writeTo(StreamOutput out) throws IOException {
         clusterName.writeTo(out);
         out.writeOptionalWriteable(clusterState);
+        if (out.getVersion().before(LegacyESVersion.V_7_0_0)) {
+            ByteSizeValue.ZERO.writeTo(out);
+        }
         out.writeBoolean(waitForTimedOut);
     }
 

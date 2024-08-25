@@ -35,6 +35,7 @@ package org.opensearch.cluster.metadata;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.action.ActionRunnable;
@@ -837,6 +838,10 @@ public class MetadataIndexStateService {
         final Map<Index, IndexResult> verifyResult
     ) {
 
+        // Remove the index routing table of closed indices if the cluster is in a mixed version
+        // that does not support the replication of closed indices
+        final boolean removeRoutingTable = currentState.nodes().getMinNodeVersion().before(LegacyESVersion.V_7_2_0);
+
         final Metadata.Builder metadata = Metadata.builder(currentState.metadata());
         final ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
         final RoutingTable.Builder routingTable = RoutingTable.builder(currentState.routingTable());
@@ -909,11 +914,16 @@ public class MetadataIndexStateService {
                 blocks.removeIndexBlockWithId(index.getName(), INDEX_CLOSED_BLOCK_ID);
                 blocks.addIndexBlock(index.getName(), INDEX_CLOSED_BLOCK);
                 final IndexMetadata.Builder updatedMetadata = IndexMetadata.builder(indexMetadata).state(IndexMetadata.State.CLOSE);
-                metadata.put(
-                    updatedMetadata.settingsVersion(indexMetadata.getSettingsVersion() + 1)
-                        .settings(Settings.builder().put(indexMetadata.getSettings()).put(VERIFIED_BEFORE_CLOSE_SETTING.getKey(), true))
-                );
-                routingTable.addAsFromOpenToClose(metadata.getSafe(index));
+                if (removeRoutingTable) {
+                    metadata.put(updatedMetadata);
+                    routingTable.remove(index.getName());
+                } else {
+                    metadata.put(
+                        updatedMetadata.settingsVersion(indexMetadata.getSettingsVersion() + 1)
+                            .settings(Settings.builder().put(indexMetadata.getSettings()).put(VERIFIED_BEFORE_CLOSE_SETTING.getKey(), true))
+                    );
+                    routingTable.addAsFromOpenToClose(metadata.getSafe(index));
+                }
 
                 logger.debug("closing index {} succeeded", index);
                 closedIndices.add(index.getName());

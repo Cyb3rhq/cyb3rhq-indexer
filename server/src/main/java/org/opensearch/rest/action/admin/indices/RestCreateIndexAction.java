@@ -85,7 +85,7 @@ public class RestCreateIndexAction extends BaseRestHandler {
         createIndexRequest.clusterManagerNodeTimeout(
             request.paramAsTime("cluster_manager_timeout", createIndexRequest.clusterManagerNodeTimeout())
         );
-        parseDeprecatedMasterTimeoutParameter(createIndexRequest, request, deprecationLogger, getName());
+        parseDeprecatedMasterTimeoutParameter(createIndexRequest, request);
         createIndexRequest.waitForActiveShards(ActiveShardCount.parseString(request.param("wait_for_active_shards")));
         return channel -> client.admin().indices().create(createIndexRequest, new RestToXContentListener<>(channel));
     }
